@@ -21,7 +21,9 @@ class TestEvent_2(Event):
         self.data = data
 
 
-class Test(EventAwareBase):
+class TestClass_1(EventAwareBase):
+    name: str = "default"
+
     def __init__(self, event_manager, name):
         super().__init__(event_manager)
         self.name = name
@@ -29,6 +31,16 @@ class Test(EventAwareBase):
     @subscribe_classmethod(TestEvent_1)
     def on_test_event(self, event: TestEvent_1):
         print(f"{event.data} from on_test_event of {self.name}")
+
+    @subscribe_classmethod(TestEvent_2)
+    @staticmethod
+    def test_static_method(event: TestEvent_2):
+        print(f"{event.data} from test_static_method")
+
+    @subscribe_classmethod(TestEvent_2)
+    @classmethod
+    def test_class_method(cls, event: TestEvent_2):
+        print(f"{event.data} from test_class_method of {cls.name}")
 
 
 @subscribe(TestEvent_1, TestEvent_2)
@@ -39,8 +51,8 @@ def test_error(event: TestEvent_1):
     raise Exception("test_error")
 
 if __name__ == "__main__":
-    alice = Test(event_manager, "Alice")
-    bob = Test(event_manager, "Bob")
+    alice = TestClass_1(event_manager, "Alice")
+    bob = TestClass_1(event_manager, "Bob")
     event_manager.emit(TestEvent_1("hello"))
 
     remove_callback(alice.on_test_event, TestEvent_1)

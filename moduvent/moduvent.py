@@ -1,12 +1,39 @@
 import importlib
+import inspect
 from collections import deque
 from pathlib import Path
 from threading import RLock
-from types import FunctionType, MethodType
 from typing import Callable, Deque, Dict, List, Type
+from enum import Enum, auto
 
 from .log import logger
 
+class FunctionTypes(Enum):
+    CLASSMETHOD = auto()
+    STATICMETHOD = auto()
+    BOUND_METHOD = auto()
+    UNBOUND_METHOD = auto()  # this occurs when a class method is defined but the class is not initialized
+    FUNCTION = auto()
+    CALLBACK = auto()
+    UNKNOWN = auto()
+
+def check_function_type(func):
+    if isinstance(func, Callback):
+        return FunctionTypes.CALLBACK
+    type_name = func.__class__.__name__
+    if type_name == "classmethod":
+        return FunctionTypes.CLASSMETHOD
+    elif type_name == "staticmethod":
+        return FunctionTypes.STATICMETHOD
+    elif type_name == "method":
+        return FunctionTypes.BOUND_METHOD
+    elif type_name == "function":
+        if hasattr(func, "_subscriptions"):
+            return FunctionTypes.UNBOUND_METHOD
+        else:
+            return FunctionTypes.FUNCTION
+    else:
+        return FunctionTypes.UNKNOWN
 
 class Event:
     """Base event class"""
@@ -20,36 +47,46 @@ class Callback:
         self,
         func: Callable[[Event], None],
         event: Type[Event] | Event,
-        instance=None,
+        instance: object | type=None,
     ):
+        '''
+        BOUND_METHOD: instance is the instance
+        UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
+        CLASSMETHOD: instance is the class
+        FUNCTION/STATICMETHOD: instance is None
+        '''
         self.func: Callable[[Event], None] = func
         self.event: Event | Type[Event] = event
         self.instance = instance
+        self.func_type = check_function_type(func)
 
     def call(self):
-        if self.instance:
+        if self.func_type == FunctionTypes.CLASSMETHOD or self.func_type == FunctionTypes.BOUND_METHOD:
+            self.func(self.event)
+        elif self.func_type == FunctionTypes.FUNCTION or self.func_type == FunctionTypes.STATICMETHOD:
+            self.func(self.event)
+        elif self.func_type == FunctionTypes.UNBOUND_METHOD:
             self.func(self.instance, self.event)
         else:
-            self.func(self.event)
+            logger.exception(f"Unknown function type for {self.func.__name__}")
 
     def copy(self):
         # shallow copy
-        return Callback(self.func, self.event, self.instance)
+        callback = Callback(self.func, self.event, self.instance)
+        return callback
 
     def __eq__(self, value):
-        if isinstance(value, Callback):
-            return self.func is value.func and self.event is value.event
-        elif isinstance(value, FunctionType):
+        func_type = check_function_type(value)
+        if func_type == FunctionTypes.CALLBACK:
+            return self.func == value.func and self.event == value.event
+        elif func_type in [FunctionTypes.CLASSMETHOD, FunctionTypes.BOUND_METHOD, FunctionTypes.UNBOUND_METHOD, FunctionTypes.FUNCTION, FunctionTypes.STATICMETHOD]:
             return self.func == value
-        elif isinstance(value, MethodType):
-            if self.instance is None:
-                return False
-            return getattr(self.instance, self.func.__name__) == value
-        return False
+        else:
+            return False
 
     def __str__(self):
         instance_string = "None" if self.instance is None else f"{self.instance}"
-        return f"Callback {self.func.__name__} ({instance_string}) for {self.event}"
+        return f"Callback {self.func.__name__} ({instance_string}:{self.func_type}) for {self.event}"
 
 
 # We say that a subscription is the information that a method wants to be called back
@@ -81,17 +118,19 @@ class EventManager:
                     logger.exception(f"Error while processing callback: {e}")
                     continue
 
-    def register(
-        self, func: Callable[[Event], None], event_type: Type[Event], instance=None
-    ):
-        if hasattr(func, "__self__"):
-            instance = None  # instance is already set in the method
-        callback = Callback(func=func, event=event_type, instance=instance)
+    def _register_callback(self, callback: Callback):
         with self._subscription_lock:
-            self._subscriptions.setdefault(event_type, []).append(callback)
+            self._subscriptions.setdefault(callback.event, []).append(callback)
+
+    def register(
+        self, func: Callable[[Event], None], event_type: Type[Event]
+    ):
+        callback = Callback(func=func, event=event_type)
+        self._register_callback(callback)
         logger.debug(f"Registered {callback}")
 
     def subscribe(self, *event_types: Type[Event]):
+        '''This is used as a decorator to register a simple function.'''
         def decorator(func: Callable[[Event], None]):
             for event_type in event_types:
                 self.register(func=func, event_type=event_type)
@@ -111,10 +150,10 @@ class EventManager:
 
     def remove_function(self, func: Callable[[Event], None]):
         """Remove all callbacks for a function."""
-        for callbacks in self._subscriptions.values():
-            for callback in callbacks:
-                if callback == func:
-                    with self._subscription_lock:
+        with self._subscription_lock:
+            for callbacks in self._subscriptions.values():
+                for callback in callbacks:
+                    if callback == func:
                         callbacks.remove(callback)
         logger.debug(f"Removed all callbacks for {func}")
 
@@ -168,7 +207,7 @@ class EventMeta(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        _subscriptions: Dict[Type[Event], List[Callable]] = {}
+        _subscriptions: Dict[Type[Event], List[Callback]] = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if callable(attr_value) and hasattr(attr_value, "_subscriptions"):
@@ -190,9 +229,19 @@ class EventAwareBase(metaclass=EventMeta):
     def _register(self):
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
-                self.event_manager.register(
-                    func=func, event_type=event_type, instance=self
-                )
+                func_type = check_function_type(func)
+                callback = Callback(func=func, event=event_type)
+                if func_type == FunctionTypes.CLASSMETHOD:
+                    callback.instance = self.__class__
+                    logger.debug(f"Set callback.instance to {self.__class__} for class method {func.func.__name__}")
+                elif func_type == FunctionTypes.UNBOUND_METHOD:
+                    callback.instance = self
+                    logger.debug(f"Set callback.instance to {self} for bounded method {func.__name__}")
+                elif func_type == FunctionTypes.STATICMETHOD or func_type == FunctionTypes.FUNCTION:
+                    logger.debug(f"Set callback.instance to None for static/function method {func.__name__}")
+                else:
+                    logger.warning(f"Unknown function type for {func.__name__} ({func_type})")
+                self.event_manager._register_callback(callback)
 
 
 class ModuleLoader:
@@ -231,5 +280,4 @@ class ModuleLoader:
             logger.debug(f"Successfully loaded module: {module_name}")
 
         except ImportError as e:
-            logger.error(f"Failed to import module {module_name}: {e}")
-            raise
+            logger.exception(f"Error while loading module {module_name}: {e}")
