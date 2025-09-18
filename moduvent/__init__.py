@@ -7,7 +7,7 @@ discover_modules = module_loader.discover_modules
 subscribe = event_manager.subscribe
 unsubscribe = event_manager.unsubscribe
 unsubscribe_instance = event_manager.unsubscribe_instance
-unsubscribe_all = event_manager.unsubscribe_all
+unsubscribe_all = event_manager.remove_function
 clear_event_type = event_manager.clear_event_type
 emit = event_manager.emit
 
@@ -24,4 +24,6 @@ __all__ = [
     module_loader,
     logger,
     unsubscribe,
+    unsubscribe_instance,
+    unsubscribe_all,
 ]

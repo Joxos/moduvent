@@ -88,9 +88,8 @@ class EventManager:
                     if cb.instance != instance
                 ]
 
-    def unsubscribe_all(self, func: Callable[[Event], None]):
+    def remove_function(self, func: Callable[[Event], None]):
         with self._lock:
-            # 确定实例（如果有）
             instance = None
             if hasattr(func, "__self__"):
                 instance = func.__self__

@@ -67,6 +67,26 @@ if __name__ == "__main__":
     # or anywhere else in your code
 ```
 
+### Unsubscribe events
+
+You can unsubscribe subscriptions in many ways:
+
+```python
+# Unsubscribe a function from an event type
+unsubscribe(handle_user_login, UserLoggedIn)
+# or
+unsubscribe(a_user_manager_instance.handle_user_login, UserLoggedIn)
+
+# Unsubscribe all functions from an instance
+unsubscribe_instance(a_user_manager_instance)
+
+# Unsubscribe a function from all event types
+remove_function(handle_user_login)
+
+# Unsubscribe all functions from an event type
+clear_event_type(UserLoggedIn)
+```
+
 ### Module System
 
 Moduvent includes a dynamic module loader for plugin architecture:
@@ -108,6 +128,15 @@ This will try to load all modules in the specified directory and register their 
 - `emit(event)`: Emit an event to all subscribers
 
 - `discover_modules(modules_dir="modules")`: Discover and load modules from a directory
+
+- `unsubscribe(self, func: Callable[[Event], None], event_type: Type[Event])`: Unsubscribe a function from an event type
+
+- `unsubscribe_instance(self, instance: object)`: Unsubscribe all functions from an instance
+
+- `remove_function(self, func: Callable[[Event], None])`: Unsubscribe a function from all event types
+
+- `clear_event_type(self, event_type: Type[Event])`: Unsubscribe all functions from an event type
+
 
 ### Module Structure
 
