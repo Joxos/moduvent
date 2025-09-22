@@ -71,13 +71,15 @@ class EventManager:
         with self._callqueue_lock:
             while self._callqueue:
                 callback = self._callqueue.popleft()
-                instance_string = ""
-                if callback.instance:
-                    instance_string = f"{callback.instance}"
+                instance_string = f"{callback.instance}"
                 logger.debug(
                     f"Processing callqueue callback: {callback.func.__name__} {instance_string}"
                 )
-                callback.call()
+                try:
+                    callback.call()
+                except Exception as e:
+                    logger.exception(f"Error while processing callback: {e}")
+                    continue
 
     def register(
         self, func: Callable[[Event], None], event_type: Type[Event], instance=None
