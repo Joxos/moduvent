@@ -31,6 +31,7 @@ class Callback:
             self.func(self.event)
 
     def copy(self):
+        # shallow copy
         return Callback(self.func, self.event, self.instance)
 
 
@@ -40,7 +41,8 @@ class EventManager:
         self._callqueue: Deque[Callback] = deque()
         self._lock = RLock()
 
-    def _subscribe(self, event_type: Type[Event], callback: Callback):
+    def _register(self, event_type: Type[Event], callback: Callback):
+        """Process subscription request."""
         with self._lock:
             self._subscriptions.setdefault(event_type, []).append(callback)
 
@@ -48,7 +50,7 @@ class EventManager:
         def decorator(func: Callable[[Event], None]):
             for event_type in event_types:
                 callback = Callback(func, event_type)
-                self._subscribe(event_type, callback)
+                self._register(event_type, callback)
                 logger.debug(
                     f"Subscribed function {func.__name__} to {event_type.__name__}"
                 )
@@ -133,7 +135,10 @@ class EventManager:
     def _process_callqueue(self):
         while self._callqueue:
             callback = self._callqueue.popleft()
-            logger.debug(f"Processing callqueue callback: {callback.func.__name__}")
+            instance = ""
+            if callback.instance:
+                instance = f"from {callback.instance}"
+            logger.debug(f"Processing callqueue callback: {callback.func.__name__} {instance}")
 
             @logger.catch
             def wrapper():
@@ -161,22 +166,20 @@ def subscribe_classmethod(*event_types: List[Type[Event]]):
 
 
 class EventMeta(type):
-    """Define a new class with events info held."""
+    """Define a new class with events info gathered."""
 
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        subscriptions: Dict[Type[Event], List[Callback]] = {}
+        _subscriptions: Dict[Type[Event], List[Callback]] = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if callable(attr_value) and hasattr(attr_value, "_subscriptions"):
                 for event_type in attr_value._subscriptions:
-                    if event_type not in subscriptions:
-                        subscriptions[event_type] = []
                     callback = Callback(attr_value, event_type)
-                    subscriptions[event_type].append(callback)
+                    _subscriptions.setdefault(event_type, []).append(callback)
 
-        new_class.subscriptions = subscriptions
+        new_class._subscriptions = _subscriptions
         return new_class
 
 
@@ -189,7 +192,7 @@ class EventAwareBase(metaclass=EventMeta):
         self._register()
 
     def _register(self):
-        for event_type, callbacks in self.subscriptions.items():
+        for event_type, callbacks in self._subscriptions.items():
             for callback in callbacks:
                 callback.instance = self
                 self.event_manager._subscribe(event_type, callback)
