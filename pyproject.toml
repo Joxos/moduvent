@@ -1,7 +1,7 @@
 [project]
 name = "moduvent"
 version = "0.1.0"
-description = "Add your description here"
+description = "A lightweight, modular event system for Python applications with plugin architecture support."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
