@@ -172,6 +172,22 @@ logger.add(
 )
 ```
 
+## TODOs
+
+- Event filters
+
+- Event priorities and consequences
+
+- Customized callback arguments
+
+- Customized exceptions handling
+
+- Cached callbacks
+
+- Optimized data structures of _subscriptions
+
+- Weak references
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
