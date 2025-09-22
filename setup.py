@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.0'
+VERSION = "1.0"
 setup(
-    name='moduvent',
+    name="moduvent",
     version=VERSION,
-    description='A package for managing events',
+    description="A lightweight, modular event system for Python applications with plugin architecture support.",
     packages=find_packages(),
 )
