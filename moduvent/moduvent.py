@@ -39,7 +39,13 @@ class Event:
     """Base event class"""
 
     def __str__(self):
-        return f"{type(self).__name__}"
+        # get all attributes without the ones starting with __
+        attrs = [
+            f"{k}={v}"
+            for k, v in self.__dict__.items()
+            if not k.startswith("__")
+        ]
+        return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
 class Callback:
@@ -61,14 +67,12 @@ class Callback:
         self.func_type = check_function_type(func)
 
     def call(self):
-        if self.func_type == FunctionTypes.CLASSMETHOD or self.func_type == FunctionTypes.BOUND_METHOD:
-            self.func(self.event)
-        elif self.func_type == FunctionTypes.FUNCTION or self.func_type == FunctionTypes.STATICMETHOD:
+        if self.func_type in [FunctionTypes.CLASSMETHOD, FunctionTypes.BOUND_METHOD, FunctionTypes.FUNCTION, FunctionTypes.STATICMETHOD]:
             self.func(self.event)
         elif self.func_type == FunctionTypes.UNBOUND_METHOD:
             self.func(self.instance, self.event)
         else:
-            logger.exception(f"Unknown function type for {self.func.__name__}")
+            logger.exception(f"Unknown function type for {self.func.__qualname__}")
 
     def copy(self):
         # shallow copy
@@ -86,7 +90,7 @@ class Callback:
 
     def __str__(self):
         instance_string = "None" if self.instance is None else f"{self.instance}"
-        return f"Callback {self.func.__name__} ({instance_string}:{self.func_type}) for {self.event}"
+        return f"Callback: {self.event} -> {self.func.__qualname__} ({instance_string}:{self.func_type})"
 
 
 # We say that a subscription is the information that a method wants to be called back
@@ -104,19 +108,17 @@ class EventManager:
             logger.debug(f"{callback}")
 
     def _process_callqueue(self):
-        logger.debug("Processing callqueue:")
+        logger.debug("Processing callqueue...")
         with self._callqueue_lock:
             while self._callqueue:
                 callback = self._callqueue.popleft()
-                instance_string = f"{callback.instance}"
-                logger.debug(
-                    f"Processing callqueue callback: {callback.func.__name__} {instance_string}"
-                )
+                logger.debug(f"Calling {callback}")
                 try:
                     callback.call()
                 except Exception as e:
                     logger.exception(f"Error while processing callback: {e}")
                     continue
+        logger.debug("End processing callqueue.")
 
     def _register_callback(self, callback: Callback):
         with self._subscription_lock:
@@ -165,13 +167,14 @@ class EventManager:
 
     def emit(self, event: Event):
         event_type = type(event)
-        logger.debug(f"Emitting event: {event_type.__name__}")
+        logger.debug(f"Emitting {event}")
 
         if event_type in self._subscriptions:
+            callbacks = self._subscriptions[event_type]
             logger.debug(
-                f"Found {len(self._subscriptions[event_type])} callbacks for event type: {event_type.__name__}"
+                f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
-            for callback in self._subscriptions[event_type]:
+            for callback in callbacks:
                 callback_copy = callback.copy()
                 callback_copy.event = event
                 self._callqueue.append(callback_copy)
@@ -195,7 +198,7 @@ def subscribe_classmethod(*event_types: List[Type[Event]]):
         if not hasattr(func, "_subscriptions"):
             func._subscriptions = []  # note that function member does not support type hint
         func._subscriptions.extend(event_types)
-        logger.debug(f"Tag subscription info for {func.__name__} {event_types}")
+        logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
         return func
 
     return decorator
@@ -227,20 +230,21 @@ class EventAwareBase(metaclass=EventMeta):
         self._register()
 
     def _register(self):
+        logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
                 func_type = check_function_type(func)
                 callback = Callback(func=func, event=event_type)
                 if func_type == FunctionTypes.CLASSMETHOD:
                     callback.instance = self.__class__
-                    logger.debug(f"Set callback.instance to {self.__class__} for class method {func.func.__name__}")
                 elif func_type == FunctionTypes.UNBOUND_METHOD:
                     callback.instance = self
-                    logger.debug(f"Set callback.instance to {self} for bounded method {func.__name__}")
                 elif func_type == FunctionTypes.STATICMETHOD or func_type == FunctionTypes.FUNCTION:
-                    logger.debug(f"Set callback.instance to None for static/function method {func.__name__}")
+                    callback.instance = None
                 else:
-                    logger.warning(f"Unknown function type for {func.__name__} ({func_type})")
+                    logger.exception(f"Unknown function type for {func.__qualname__} ({func_type})")
+                    return
+                logger.debug(f"callback.instance = {callback.instance} for {func_type} {func.__qualname__}")
                 self.event_manager._register_callback(callback)
 
 
