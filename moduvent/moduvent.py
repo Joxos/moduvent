@@ -71,8 +71,7 @@ class Callback:
 
     def copy(self):
         # shallow copy
-        callback = Callback(self.func, self.event)
-        return callback
+        return Callback(func=self.func, event=self.event)
 
     def __eq__(self, value):
         func_type = check_function_type(value)
@@ -90,7 +89,7 @@ class Callback:
 
     def __str__(self):
         instance_string = (
-            "None" if not hasattr(self.func, "__self__") else str(self.func.__self__)
+            str(self.func.__self__) if hasattr(self.func, "__self__") else "None"
         )
         return f"Callback: {self.event} -> {self.func.__qualname__} ({instance_string}:{self.func_type})"
 
@@ -194,6 +193,12 @@ class EventManager:
 
 def subscribe_method(*event_types: List[Type[Event]]):
     """Tag the method with subscription info."""
+    # Validate that all event_types are subclasses of Event  
+    for event_type in event_types:  
+        if not isinstance(event_type, type) or not issubclass(event_type, Event):  
+            raise TypeError(  
+                f"subscribe_method decorator expects Event subclasses, got {event_type!r}."  
+            )  
 
     def decorator(func):
         if not hasattr(func, "_subscriptions"):

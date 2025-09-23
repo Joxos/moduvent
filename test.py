@@ -39,9 +39,11 @@ class TestClass_1(EventAwareBase):
 def test_func(event: TestEvent_1):
     print(f"{event.data} from test_func")
 
+class TestException(Exception):
+    pass
 
 def test_error(event: TestEvent_1):
-    raise Exception(f"test_error with {event.data}")
+    raise TestException(f"test_error with {event.data}")
 
 
 if __name__ == "__main__":

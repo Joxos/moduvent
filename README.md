@@ -22,7 +22,7 @@ pip install moduvent
 
 ## Quick Start
 
-Everything below can be imporrted from the `moduvent` package.
+Everything below can be imported from the `moduvent` package.
 
 ### Define a custom event
 
@@ -190,11 +190,13 @@ logger.add(
 
 - Customized callback arguments
 
-- Customized exceptions handling
+- Customized exception handling
 
 - Cached callbacks
 
 - Optimized data structures of _subscriptions
+
+- Handling duplicate subscriptions
 
 ## Contributing
 
