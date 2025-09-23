@@ -196,8 +196,6 @@ logger.add(
 
 - Optimized data structures of _subscriptions
 
-- Weak references
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
