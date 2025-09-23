@@ -41,7 +41,7 @@ def test_func(event: TestEvent_1):
 
 
 def test_error(event: TestEvent_1):
-    raise Exception("test_error")
+    raise Exception(f"test_error with {event.data}")
 
 
 if __name__ == "__main__":
