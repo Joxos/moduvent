@@ -1,5 +1,5 @@
 from .moduvent import (Event, EventAwareBase, EventManager, ModuleLoader,
-                       logger, subscribe_classmethod)
+                       logger, subscribe_method)
 
 event_manager = EventManager()
 register = event_manager.register
@@ -18,7 +18,7 @@ __all__ = [
     ModuleLoader,
     register,
     subscribe,
-    subscribe_classmethod,
+    subscribe_method,
     remove_callback,
     remove_function,
     clear_event_type,

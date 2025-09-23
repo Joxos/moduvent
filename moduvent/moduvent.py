@@ -1,29 +1,27 @@
 import importlib
-import inspect
 from collections import deque
+from enum import Enum, auto
 from pathlib import Path
 from threading import RLock
 from typing import Callable, Deque, Dict, List, Type
-from enum import Enum, auto
 
 from .log import logger
 
+
 class FunctionTypes(Enum):
-    CLASSMETHOD = auto()
     STATICMETHOD = auto()
     BOUND_METHOD = auto()
-    UNBOUND_METHOD = auto()  # this occurs when a class method is defined but the class is not initialized
+    UNBOUND_METHOD = auto()  # this occurs when a class method (both classmethod and instance method) is defined but the class is not initialized
     FUNCTION = auto()
     CALLBACK = auto()
     UNKNOWN = auto()
+
 
 def check_function_type(func):
     if isinstance(func, Callback):
         return FunctionTypes.CALLBACK
     type_name = func.__class__.__name__
-    if type_name == "classmethod":
-        return FunctionTypes.CLASSMETHOD
-    elif type_name == "staticmethod":
+    if type_name == "staticmethod":
         return FunctionTypes.STATICMETHOD
     elif type_name == "method":
         return FunctionTypes.BOUND_METHOD
@@ -35,16 +33,13 @@ def check_function_type(func):
     else:
         return FunctionTypes.UNKNOWN
 
+
 class Event:
     """Base event class"""
 
     def __str__(self):
         # get all attributes without the ones starting with __
-        attrs = [
-            f"{k}={v}"
-            for k, v in self.__dict__.items()
-            if not k.startswith("__")
-        ]
+        attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
@@ -53,43 +48,50 @@ class Callback:
         self,
         func: Callable[[Event], None],
         event: Type[Event] | Event,
-        instance: object | type=None,
     ):
-        '''
+        """
         BOUND_METHOD: instance is the instance
         UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
         CLASSMETHOD: instance is the class
         FUNCTION/STATICMETHOD: instance is None
-        '''
+        """
         self.func: Callable[[Event], None] = func
         self.event: Event | Type[Event] = event
-        self.instance = instance
         self.func_type = check_function_type(func)
 
     def call(self):
-        if self.func_type in [FunctionTypes.CLASSMETHOD, FunctionTypes.BOUND_METHOD, FunctionTypes.FUNCTION, FunctionTypes.STATICMETHOD]:
+        if self.func_type in [
+            FunctionTypes.BOUND_METHOD,
+            FunctionTypes.FUNCTION,
+            FunctionTypes.STATICMETHOD,
+        ]:
             self.func(self.event)
-        elif self.func_type == FunctionTypes.UNBOUND_METHOD:
-            self.func(self.instance, self.event)
         else:
             logger.exception(f"Unknown function type for {self.func.__qualname__}")
 
     def copy(self):
         # shallow copy
-        callback = Callback(self.func, self.event, self.instance)
+        callback = Callback(self.func, self.event)
         return callback
 
     def __eq__(self, value):
         func_type = check_function_type(value)
         if func_type == FunctionTypes.CALLBACK:
             return self.func == value.func and self.event == value.event
-        elif func_type in [FunctionTypes.CLASSMETHOD, FunctionTypes.BOUND_METHOD, FunctionTypes.UNBOUND_METHOD, FunctionTypes.FUNCTION, FunctionTypes.STATICMETHOD]:
+        elif func_type in [
+            FunctionTypes.BOUND_METHOD,
+            FunctionTypes.UNBOUND_METHOD,
+            FunctionTypes.FUNCTION,
+            FunctionTypes.STATICMETHOD,
+        ]:
             return self.func == value
         else:
             return False
 
     def __str__(self):
-        instance_string = "None" if self.instance is None else f"{self.instance}"
+        instance_string = (
+            "None" if not hasattr(self.func, "__self__") else str(self.func.__self__)
+        )
         return f"Callback: {self.event} -> {self.func.__qualname__} ({instance_string}:{self.func_type})"
 
 
@@ -124,15 +126,14 @@ class EventManager:
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
 
-    def register(
-        self, func: Callable[[Event], None], event_type: Type[Event]
-    ):
+    def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = Callback(func=func, event=event_type)
         self._register_callback(callback)
         logger.debug(f"Registered {callback}")
 
     def subscribe(self, *event_types: Type[Event]):
-        '''This is used as a decorator to register a simple function.'''
+        """This is used as a decorator to register a simple function."""
+
         def decorator(func: Callable[[Event], None]):
             for event_type in event_types:
                 self.register(func=func, event_type=event_type)
@@ -191,7 +192,7 @@ class EventManager:
             self._process_callqueue()
 
 
-def subscribe_classmethod(*event_types: List[Type[Event]]):
+def subscribe_method(*event_types: List[Type[Event]]):
     """Tag the method with subscription info."""
 
     def decorator(func):
@@ -213,7 +214,7 @@ class EventMeta(type):
         _subscriptions: Dict[Type[Event], List[Callback]] = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
-            if callable(attr_value) and hasattr(attr_value, "_subscriptions"):
+            if hasattr(attr_value, "_subscriptions"):
                 for event_type in attr_value._subscriptions:
                     _subscriptions.setdefault(event_type, []).append(attr_value)
 
@@ -234,17 +235,8 @@ class EventAwareBase(metaclass=EventMeta):
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
                 func_type = check_function_type(func)
-                callback = Callback(func=func, event=event_type)
-                if func_type == FunctionTypes.CLASSMETHOD:
-                    callback.instance = self.__class__
-                elif func_type == FunctionTypes.UNBOUND_METHOD:
-                    callback.instance = self
-                elif func_type == FunctionTypes.STATICMETHOD or func_type == FunctionTypes.FUNCTION:
-                    callback.instance = None
-                else:
-                    logger.exception(f"Unknown function type for {func.__qualname__} ({func_type})")
-                    return
-                logger.debug(f"callback.instance = {callback.instance} for {func_type} {func.__qualname__}")
+                callback = Callback(func=getattr(self, func.__name__), event=event_type)
+                logger.debug(f"Registered {func.__qualname__} ({func_type})")
                 self.event_manager._register_callback(callback)
 
 
