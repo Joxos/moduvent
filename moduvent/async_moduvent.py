@@ -1,4 +1,5 @@
 from asyncio import Lock, Queue
+from abc import ABC, abstractmethod
 from sys import stdout
 from typing import Callable, Dict, List, Type
 
@@ -44,7 +45,7 @@ class AsyncEventManager:
         self._callqueue_lock = Lock()
 
     def _verbose_callqueue(self):
-        async_moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
+        async_moduvent_logger.debug(f"Callqueue ({self._callqueue.qsize()}):")
         for callback in self._callqueue:
             async_moduvent_logger.debug(f"{callback}")
 
@@ -149,20 +150,22 @@ class AsyncEventMeta(type):
 class AsyncEventAwareBase(metaclass=AsyncEventMeta):
     """The base class that utilize the metaclass."""
 
-    async def __init__(self, event_manager):
+    def __init__(self, event_manager):
         self.event_manager: AsyncEventManager = event_manager
-        # trigger registrations
-        await self._register()
+
+    @classmethod
+    @abstractmethod
+    async def create(cls, event_manager):
+        instance = cls(event_manager)
+        await instance._register()
+        return instance
+
 
     async def _register(self):
         async_moduvent_logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
-                func_type = check_function_type(func)
                 callback = AsyncCallback(
                     func=getattr(self, func.__name__), event=event_type
-                )
-                async_moduvent_logger.debug(
-                    f"Registered {func.__qualname__} ({func_type})"
                 )
                 await self.event_manager._register_callback(callback)
