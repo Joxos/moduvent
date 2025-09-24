@@ -1,6 +1,16 @@
+from sys import stderr
+
+from loguru import logger
+
 from moduvent import (Event, EventAwareBase, clear_event_type, event_manager,
                       register, remove_callback, remove_function, subscribe,
                       subscribe_method)
+
+logger.add(
+    stderr,
+    format="<green>{time}</green> | {extra[source]} | <level>{level}</level> | <level>{message}</level>",
+    level="DEBUG",
+)
 
 
 class TestEvent_1(Event):
