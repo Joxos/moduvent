@@ -1,6 +1,24 @@
-from moduvent import (Event, EventAwareBase, clear_event_type, event_manager,
-                      register, remove_callback, remove_function, subscribe,
-                      subscribe_method)
+from sys import stderr
+
+from loguru import logger
+
+from moduvent import (
+    Event,
+    EventAwareBase,
+    clear_event_type,
+    event_manager,
+    register,
+    remove_callback,
+    remove_function,
+    subscribe,
+    subscribe_method,
+)
+
+logger.add(
+    stderr,
+    format="<green>{time}</green> | {extra[source]} | <level>{level}</level> | <level>{message}</level>",
+    level="DEBUG",
+)
 
 
 class TestEvent_1(Event):
@@ -39,8 +57,10 @@ class TestClass_1(EventAwareBase):
 def test_func(event: TestEvent_1):
     print(f"{event.data} from test_func")
 
+
 class TestException(Exception):
     pass
+
 
 def test_error(event: TestEvent_1):
     raise TestException(f"test_error with {event.data}")

@@ -116,6 +116,24 @@ discover_modules("plugins")
 
 This will try to load all modules in the specified directory and register their event handlers if possible.
 
+### Logging
+
+By default, Moduvent uses [loguru](https://github.com/Delgan/loguru) for logging and all logging messages are hidden. You can configure the `logger` object to enable logging.
+
+```python
+# in your files
+from loguru import logger
+
+# This is strongly recommended to avoid duplicate logs
+# For more info, see: https://loguru.readthedocs.io/en/stable/resources/troubleshooting.html#why-are-my-logs-duplicated-in-the-output
+logger.remove()
+
+# add your own handlers
+logger.add(...)
+```
+
+When it comes to detailed configuration, please refer to the [loguru documentation](https://loguru.readthedocs.io/en/stable/overview.html).
+
 ## API Reference
 
 ### Core Classes
