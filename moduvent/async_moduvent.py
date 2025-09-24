@@ -1,4 +1,4 @@
-from asyncio import Lock, Queue
+import asyncio
 from abc import abstractmethod
 from sys import stdout
 from typing import Callable, Dict, List, Type
@@ -40,9 +40,9 @@ class AsyncCallback(BaseCallback):
 class AsyncEventManager:
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[AsyncCallback]] = {}
-        self._callqueue: Queue[AsyncCallback] = Queue()
-        self._subscription_lock = Lock()
-        self._callqueue_lock = Lock()
+        self._callqueue: asyncio.Queue[AsyncCallback] = asyncio.Queue()
+        self._subscription_lock = asyncio.Lock()
+        self._callqueue_lock = asyncio.Lock()
 
     def _verbose_callqueue(self):
         async_moduvent_logger.debug(f"Callqueue ({self._callqueue.qsize()}):")
@@ -73,17 +73,15 @@ class AsyncEventManager:
         await self._register_callback(callback)
         async_moduvent_logger.debug(f"Registered {callback}")
 
-    async def subscribe(self, *event_types: Type[Event]):
+    def subscribe(self, *event_types: Type[Event]):
         """This is used as a decorator to register a simple function."""
-        func_ref = None
 
-        def decorator(func: Callable[[Event], None]):
-            nonlocal func_ref
-            func_ref = func
+        async def decorator(func: Callable[[Event], None]):
+            async with asyncio.TaskGroup() as tg:
+                for event_type in event_types:
+                    tg.create_task(self.register(func=func, event_type=event_type))
             return func
 
-        for event_type in event_types:
-            await self.register(func=func_ref, event_type=event_type)
         return decorator
 
     async def remove_callback(
