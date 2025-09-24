@@ -1,10 +1,9 @@
 [project]
 name = "moduvent"
-version = "2.2"
+version = "3.0"
 description = "A lightweight, modular event system for Python applications with plugin architecture support."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
-    "setuptools>=80.9.0",
 ]
