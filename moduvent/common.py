@@ -2,7 +2,7 @@ import importlib
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, List, Type
+from typing import Callable, Type
 
 from loguru import logger
 
@@ -87,7 +87,7 @@ class BaseCallback(ABC):
         return f"Callback: {self.event} -> {self.func.__qualname__} ({instance_string}:{self.func_type})"
 
 
-def subscribe_method(*event_types: List[Type[Event]]):
+def subscribe_method(*event_types: Type[Event]):
     """Tag the method with subscription info."""
     # Validate that all event_types are subclasses of Event
     for event_type in event_types:

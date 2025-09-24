@@ -1,11 +1,11 @@
 from asyncio import Lock, Queue
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from sys import stdout
 from typing import Callable, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, Event, FunctionTypes, check_function_type
+from .common import BaseCallback, Event, FunctionTypes
 
 logger.remove()
 logger.add(stdout, enqueue=True)
@@ -159,7 +159,6 @@ class AsyncEventAwareBase(metaclass=AsyncEventMeta):
         instance = cls(event_manager)
         await instance._register()
         return instance
-
 
     async def _register(self):
         async_moduvent_logger.debug(f"Registering callbacks of {self}...")

@@ -1,12 +1,10 @@
-import importlib
 from collections import deque
-from pathlib import Path
 from threading import RLock
 from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, Event, FunctionTypes, check_function_type
+from .common import BaseCallback, Event, FunctionTypes
 
 logger.remove()
 moduvent_logger = logger.bind(source="moduvent_sync")
@@ -172,45 +170,5 @@ class EventAwareBase(metaclass=EventMeta):
         moduvent_logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
-                func_type = check_function_type(func)
                 callback = Callback(func=getattr(self, func.__name__), event=event_type)
-                moduvent_logger.debug(f"Registered {func.__qualname__} ({func_type})")
                 self.event_manager._register_callback(callback)
-
-
-class ModuleLoader:
-    def __init__(self):
-        self.loaded_modules = set()
-
-    def discover_modules(self, modules_dir: str = "modules"):
-        modules_path = Path(modules_dir)
-
-        if not modules_path.exists():
-            moduvent_logger.warning(f"Module directory does not exist: {modules_dir}")
-            return
-
-        for item in modules_path.iterdir():
-            if item.is_dir() and not item.name.startswith("__"):
-                try:
-                    module_name = f"{modules_dir}.{item.name}"
-                    self.load_module(module_name)
-                    moduvent_logger.debug(f"Discovered module: {module_name}")
-                except ImportError as e:
-                    moduvent_logger.error(f"Failed to load module {item.name}: {e}")
-                except Exception as ex:
-                    moduvent_logger.exception(
-                        f"Unexpected error occurred while loading module {item.name}: {ex}"
-                    )
-
-    def load_module(self, module_name: str):
-        if module_name in self.loaded_modules:
-            moduvent_logger.debug(f"Module already loaded: {module_name}")
-            return
-
-        try:
-            importlib.import_module(module_name)
-            self.loaded_modules.add(module_name)
-            moduvent_logger.debug(f"Successfully loaded module: {module_name}")
-
-        except ImportError as e:
-            moduvent_logger.exception(f"Error while loading module {module_name}: {e}")

@@ -2,9 +2,17 @@ from sys import stderr
 
 from loguru import logger
 
-from moduvent import (Event, EventAwareBase, clear_event_type, event_manager,
-                      register, remove_callback, remove_function, subscribe,
-                      subscribe_method)
+from moduvent import (
+    Event,
+    EventAwareBase,
+    clear_event_type,
+    event_manager,
+    register,
+    remove_callback,
+    remove_function,
+    subscribe,
+    subscribe_method,
+)
 
 logger.add(
     stderr,
