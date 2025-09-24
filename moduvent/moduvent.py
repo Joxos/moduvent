@@ -120,14 +120,6 @@ class EventManager:
                 callback_copy.event = event
                 self._callqueue.append(callback_copy)
 
-            # trigger parent class
-            # for cls in event_type.__mro__[1:]:  # skip self
-            #     if cls in self._callbacks and cls != Event:
-            #         logger.info(f"Triggering parent class callbacks for: {cls.__name__}")
-            #         for callback in self._callbacks[cls]:
-            #             callback_copy = Callback(callback, event)
-            #             self._callqueue.append(callback_copy)
-
             self._verbose_callqueue()
             self._process_callqueue()
 
