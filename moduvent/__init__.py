@@ -1,5 +1,5 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import Event, ModuleLoader, logger, subscribe_method
+from .common import Event, ModuleLoader, subscribe_method
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
@@ -43,5 +43,4 @@ __all__ = [
     async_clear_event_type,
     module_loader,
     discover_modules,
-    logger,
 ]

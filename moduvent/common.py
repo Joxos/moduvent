@@ -6,7 +6,8 @@ from typing import Callable, List, Type
 
 from loguru import logger
 
-logger = logger.bind(source="moduvent")
+logger.remove()
+common_logger = logger.bind(source="moduvent_common")
 
 
 class FunctionTypes(Enum):
@@ -99,7 +100,7 @@ def subscribe_method(*event_types: List[Type[Event]]):
         if not hasattr(func, "_subscriptions"):
             func._subscriptions = []  # note that function member does not support type hint
         func._subscriptions.extend(event_types)
-        logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
+        common_logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
         return func
 
     return decorator
@@ -113,7 +114,7 @@ class ModuleLoader:
         modules_path = Path(modules_dir)
 
         if not modules_path.exists():
-            logger.warning(f"Module directory does not exist: {modules_dir}")
+            common_logger.warning(f"Module directory does not exist: {modules_dir}")
             return
 
         for item in modules_path.iterdir():
@@ -121,23 +122,23 @@ class ModuleLoader:
                 try:
                     module_name = f"{modules_dir}.{item.name}"
                     self.load_module(module_name)
-                    logger.debug(f"Discovered module: {module_name}")
+                    common_logger.debug(f"Discovered module: {module_name}")
                 except ImportError as e:
-                    logger.error(f"Failed to load module {item.name}: {e}")
+                    common_logger.error(f"Failed to load module {item.name}: {e}")
                 except Exception as ex:
-                    logger.exception(
+                    common_logger.exception(
                         f"Unexpected error occurred while loading module {item.name}: {ex}"
                     )
 
     def load_module(self, module_name: str):
         if module_name in self.loaded_modules:
-            logger.debug(f"Module already loaded: {module_name}")
+            common_logger.debug(f"Module already loaded: {module_name}")
             return
 
         try:
             importlib.import_module(module_name)
             self.loaded_modules.add(module_name)
-            logger.debug(f"Successfully loaded module: {module_name}")
+            common_logger.debug(f"Successfully loaded module: {module_name}")
 
         except ImportError as e:
-            logger.exception(f"Error while loading module {module_name}: {e}")
+            common_logger.exception(f"Error while loading module {module_name}: {e}")

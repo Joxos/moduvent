@@ -1,10 +1,14 @@
 from asyncio import Lock, Queue
+from sys import stdout
 from typing import Callable, Dict, List, Type
 
-from .common import (BaseCallback, Event, FunctionTypes, check_function_type,
-                     logger)
+from loguru import logger
 
-logger.add(enqueue=True)
+from .common import BaseCallback, Event, FunctionTypes, check_function_type
+
+logger.remove()
+logger.add(stdout, enqueue=True)
+async_moduvent_logger = logger.bind(source="moduvent_async")
 
 
 class AsyncCallback(BaseCallback):
@@ -16,7 +20,9 @@ class AsyncCallback(BaseCallback):
         ]:
             await self.func(self.event)
         else:
-            logger.exception(f"Unknown function type for {self.func.__qualname__}")
+            async_moduvent_logger.exception(
+                f"Unknown function type for {self.func.__qualname__}"
+            )
 
     def copy(self):
         # shallow copy
@@ -38,22 +44,24 @@ class AsyncEventManager:
         self._callqueue_lock = Lock()
 
     def _verbose_callqueue(self):
-        logger.debug(f"Callqueue ({len(self._callqueue)}):")
+        async_moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
         for callback in self._callqueue:
-            logger.debug(f"{callback}")
+            async_moduvent_logger.debug(f"{callback}")
 
     async def _process_callqueue(self):
-        logger.debug("Processing callqueue...")
+        async_moduvent_logger.debug("Processing callqueue...")
         async with self._callqueue_lock:
             while self._callqueue:
                 callback = await self._callqueue.get()
-                logger.debug(f"Calling {callback}")
+                async_moduvent_logger.debug(f"Calling {callback}")
                 try:
                     await callback.call()
                 except Exception as e:
-                    logger.exception(f"Error while processing callback: {e}")
+                    async_moduvent_logger.exception(
+                        f"Error while processing callback: {e}"
+                    )
                     continue
-        logger.debug("End processing callqueue.")
+        async_moduvent_logger.debug("End processing callqueue.")
 
     async def _register_callback(self, callback: AsyncCallback):
         async with self._subscription_lock:
@@ -62,7 +70,7 @@ class AsyncEventManager:
     async def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = AsyncCallback(func=func, event=event_type)
         await self._register_callback(callback)
-        logger.debug(f"Registered {callback}")
+        async_moduvent_logger.debug(f"Registered {callback}")
 
     def subscribe(self, *event_types: Type[Event]):
         """This is used as a decorator to register a simple function."""
@@ -84,7 +92,7 @@ class AsyncEventManager:
             for callback in self._subscriptions.get(event_type, []):
                 if callback.func == func:
                     self._subscriptions[event_type].remove(callback)
-                    logger.debug(f"Removed {callback} ({event_type})")
+                    async_moduvent_logger.debug(f"Removed {callback} ({event_type})")
 
     async def remove_function(self, func: Callable[[Event], None]):
         """Remove all callbacks for a function."""
@@ -93,21 +101,23 @@ class AsyncEventManager:
                 for callback in callbacks:
                     if callback == func:
                         callbacks.remove(callback)
-        logger.debug(f"Removed all callbacks for {func}")
+        async_moduvent_logger.debug(f"Removed all callbacks for {func}")
 
     async def clear_event_type(self, event_type: Type[Event]):
         async with self._subscription_lock:
             if event_type in self._subscriptions:
                 del self._subscriptions[event_type]
-                logger.debug(f"Cleared all subscriptions for {event_type}")
+                async_moduvent_logger.debug(
+                    f"Cleared all subscriptions for {event_type}"
+                )
 
     async def emit(self, event: Event):
         event_type = type(event)
-        logger.debug(f"Emitting {event}")
+        async_moduvent_logger.debug(f"Emitting {event}")
 
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
-            logger.debug(
+            async_moduvent_logger.debug(
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
@@ -145,12 +155,14 @@ class AsyncEventAwareBase(metaclass=AsyncEventMeta):
         await self._register()
 
     async def _register(self):
-        logger.debug(f"Registering callbacks of {self}...")
+        async_moduvent_logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
                 func_type = check_function_type(func)
                 callback = AsyncCallback(
                     func=getattr(self, func.__name__), event=event_type
                 )
-                logger.debug(f"Registered {func.__qualname__} ({func_type})")
+                async_moduvent_logger.debug(
+                    f"Registered {func.__qualname__} ({func_type})"
+                )
                 await self.event_manager._register_callback(callback)

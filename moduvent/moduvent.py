@@ -4,8 +4,12 @@ from pathlib import Path
 from threading import RLock
 from typing import Callable, Deque, Dict, List, Type
 
-from .common import (BaseCallback, Event, FunctionTypes, check_function_type,
-                     logger)
+from loguru import logger
+
+from .common import BaseCallback, Event, FunctionTypes, check_function_type
+
+logger.remove()
+moduvent_logger = logger.bind(source="moduvent_sync")
 
 
 class Callback(BaseCallback):
@@ -17,7 +21,9 @@ class Callback(BaseCallback):
         ]:
             self.func(self.event)
         else:
-            logger.exception(f"Unknown function type for {self.func.__qualname__}")
+            moduvent_logger.exception(
+                f"Unknown function type for {self.func.__qualname__}"
+            )
 
     def copy(self):
         # shallow copy
@@ -39,22 +45,22 @@ class EventManager:
         self._callqueue_lock = RLock()
 
     def _verbose_callqueue(self):
-        logger.debug(f"Callqueue ({len(self._callqueue)}):")
+        moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
         for callback in self._callqueue:
-            logger.debug(f"{callback}")
+            moduvent_logger.debug(f"{callback}")
 
     def _process_callqueue(self):
-        logger.debug("Processing callqueue...")
+        moduvent_logger.debug("Processing callqueue...")
         with self._callqueue_lock:
             while self._callqueue:
                 callback = self._callqueue.popleft()
-                logger.debug(f"Calling {callback}")
+                moduvent_logger.debug(f"Calling {callback}")
                 try:
                     callback.call()
                 except Exception as e:
-                    logger.exception(f"Error while processing callback: {e}")
+                    moduvent_logger.exception(f"Error while processing callback: {e}")
                     continue
-        logger.debug("End processing callqueue.")
+        moduvent_logger.debug("End processing callqueue.")
 
     def _register_callback(self, callback: Callback):
         with self._subscription_lock:
@@ -63,7 +69,7 @@ class EventManager:
     def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = Callback(func=func, event=event_type)
         self._register_callback(callback)
-        logger.debug(f"Registered {callback}")
+        moduvent_logger.debug(f"Registered {callback}")
 
     def subscribe(self, *event_types: Type[Event]):
         """This is used as a decorator to register a simple function."""
@@ -83,7 +89,7 @@ class EventManager:
             for callback in self._subscriptions.get(event_type, []):
                 if callback.func == func:
                     self._subscriptions[event_type].remove(callback)
-                    logger.debug(f"Removed {callback} ({event_type})")
+                    moduvent_logger.debug(f"Removed {callback}")
 
     def remove_function(self, func: Callable[[Event], None]):
         """Remove all callbacks for a function."""
@@ -92,21 +98,21 @@ class EventManager:
                 for callback in callbacks:
                     if callback.func == func:
                         callbacks.remove(callback)
-        logger.debug(f"Removed all callbacks for {func}")
+        moduvent_logger.debug(f"Removed all callbacks for {func}")
 
     def clear_event_type(self, event_type: Type[Event]):
         with self._subscription_lock:
             if event_type in self._subscriptions:
                 del self._subscriptions[event_type]
-                logger.debug(f"Cleared all subscriptions for {event_type}")
+                moduvent_logger.debug(f"Cleared all subscriptions for {event_type}")
 
     def emit(self, event: Event):
         event_type = type(event)
-        logger.debug(f"Emitting {event}")
+        moduvent_logger.debug(f"Emitting {event}")
 
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
-            logger.debug(
+            moduvent_logger.debug(
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
@@ -139,7 +145,7 @@ def subscribe_method(*event_types: List[Type[Event]]):
         if not hasattr(func, "_subscriptions"):
             func._subscriptions = []  # note that function member does not support type hint
         func._subscriptions.extend(event_types)
-        logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
+        moduvent_logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
         return func
 
     return decorator
@@ -171,12 +177,12 @@ class EventAwareBase(metaclass=EventMeta):
         self._register()
 
     def _register(self):
-        logger.debug(f"Registering callbacks of {self}...")
+        moduvent_logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
                 func_type = check_function_type(func)
                 callback = Callback(func=getattr(self, func.__name__), event=event_type)
-                logger.debug(f"Registered {func.__qualname__} ({func_type})")
+                moduvent_logger.debug(f"Registered {func.__qualname__} ({func_type})")
                 self.event_manager._register_callback(callback)
 
 
@@ -188,7 +194,7 @@ class ModuleLoader:
         modules_path = Path(modules_dir)
 
         if not modules_path.exists():
-            logger.warning(f"Module directory does not exist: {modules_dir}")
+            moduvent_logger.warning(f"Module directory does not exist: {modules_dir}")
             return
 
         for item in modules_path.iterdir():
@@ -196,23 +202,23 @@ class ModuleLoader:
                 try:
                     module_name = f"{modules_dir}.{item.name}"
                     self.load_module(module_name)
-                    logger.debug(f"Discovered module: {module_name}")
+                    moduvent_logger.debug(f"Discovered module: {module_name}")
                 except ImportError as e:
-                    logger.error(f"Failed to load module {item.name}: {e}")
+                    moduvent_logger.error(f"Failed to load module {item.name}: {e}")
                 except Exception as ex:
-                    logger.exception(
+                    moduvent_logger.exception(
                         f"Unexpected error occurred while loading module {item.name}: {ex}"
                     )
 
     def load_module(self, module_name: str):
         if module_name in self.loaded_modules:
-            logger.debug(f"Module already loaded: {module_name}")
+            moduvent_logger.debug(f"Module already loaded: {module_name}")
             return
 
         try:
             importlib.import_module(module_name)
             self.loaded_modules.add(module_name)
-            logger.debug(f"Successfully loaded module: {module_name}")
+            moduvent_logger.debug(f"Successfully loaded module: {module_name}")
 
         except ImportError as e:
-            logger.exception(f"Error while loading module {module_name}: {e}")
+            moduvent_logger.exception(f"Error while loading module {module_name}: {e}")
