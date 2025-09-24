@@ -73,14 +73,17 @@ class AsyncEventManager:
         await self._register_callback(callback)
         async_moduvent_logger.debug(f"Registered {callback}")
 
-    def subscribe(self, *event_types: Type[Event]):
+    async def subscribe(self, *event_types: Type[Event]):
         """This is used as a decorator to register a simple function."""
+        func_ref = None
 
-        async def decorator(func: Callable[[Event], None]):
-            for event_type in event_types:
-                await self.register(func=func, event_type=event_type)
+        def decorator(func: Callable[[Event], None]):
+            nonlocal func_ref
+            func_ref = func
             return func
 
+        for event_type in event_types:
+            await self.register(func=func_ref, event_type=event_type)
         return decorator
 
     async def remove_callback(
