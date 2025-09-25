@@ -34,6 +34,7 @@ def check_function_type(func):
     else:
         return FunctionTypes.UNKNOWN
 
+
 class Event:
     """Base event class"""
 
@@ -41,6 +42,7 @@ class Event:
         # get all attributes without the ones starting with __
         attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
+
 
 class EventInheritor:
     def __set_name__(self, owner, name):
@@ -54,10 +56,13 @@ class EventInheritor:
             setattr(obj, self.private_name, value)
         else:
             setattr(obj, self.private_name, None)
-            raise TypeError(f"{value} with {value_type} type is not an inheritor of base event class")
+            raise TypeError(
+                f"{value} with {value_type} type is not an inheritor of base event class"
+            )
 
     def __get__(self, obj, objtype=None):
         return getattr(obj, self.private_name)
+
 
 class WeakReference:
     def __set__(self, obj, value):
@@ -91,7 +96,9 @@ class BaseCallback(ABC):
         UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
         FUNCTION/STATICMETHOD: instance is None
         """
-        self.func_type = FunctionTypes.UNKNOWN  # we first set func_type since the setter of self.func may use it
+        self.func_type = (
+            FunctionTypes.UNKNOWN
+        )  # we first set func_type since the setter of self.func may use it
         self.func: weakref.ReferenceType[Callable[[Event], None]] = func
         self.event: Event | Type[Event] = event
 

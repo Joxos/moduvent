@@ -27,7 +27,9 @@ class AsyncCallback(BaseCallback):
 
     def copy(self):
         # shallow copy
-        return AsyncCallback(func=self.func, event=self.event)
+        if self.func and self.event:
+            return AsyncCallback(func=self.func, event=self.event)
+        return None
 
     def __eq__(self, value):
         if isinstance(value, AsyncCallback):
@@ -133,8 +135,16 @@ class AsyncEventManager:
             )
             for callback in callbacks:
                 callback_copy = callback.copy()
-                callback_copy.event = event
-                await self._callqueue.put(callback_copy)
+                if callback_copy:
+                    callback_copy.event = event
+                    self._callqueue.append(callback_copy)
+                else:
+                    # the callback is no longer valid
+                    with self._subscription_lock:
+                        self._subscriptions[event_type].remove(callback)
+                    async_moduvent_logger.warning(
+                        f"Invalid callback {callback} has been removed before processing event."
+                    )
 
             self._verbose_callqueue()
             await self._process_callqueue()
