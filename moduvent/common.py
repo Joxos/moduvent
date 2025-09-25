@@ -34,7 +34,6 @@ def check_function_type(func):
     else:
         return FunctionTypes.UNKNOWN
 
-
 class Event:
     """Base event class"""
 
@@ -43,21 +42,44 @@ class Event:
         attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
+class EventInheritor:
+    def __set_name__(self, owner, name):
+        self.public_name = name
+        self.private_name = f"_{name}"
+        setattr(owner, self.private_name, None)
+
+    def __set__(self, obj, value):
+        value_type = type(value)
+        if isinstance(value, type) or issubclass(value_type, Event):
+            setattr(obj, self.private_name, value)
+        else:
+            setattr(obj, self.private_name, None)
+            raise TypeError(f"{value} with {value_type} type is not an inheritor of base event class")
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.private_name)
 
 class WeakReference:
     def __set__(self, obj, value):
-        obj._func_ref = (
-            weakref.WeakMethod(value)
-            if check_function_type(value) == FunctionTypes.BOUND_METHOD
-            else weakref.ref(value)
-        )
+        if obj and value:
+            if check_function_type(value) == FunctionTypes.BOUND_METHOD:
+                obj._func_ref = weakref.WeakMethod(value)
+            else:
+                obj._func_ref = weakref.ref(value)
+        else:
+            obj._func_ref = None
+            raise ValueError(f"Cannot set weak reference of {value} to {obj}")
 
     def __get__(self, obj, objtype=None):
-        return obj._func_ref() if obj else None
+        ref = obj._func_ref
+        if ref is None:
+            return None
+        return ref()
 
 
 class BaseCallback(ABC):
-    func = WeakReference()
+    func: WeakReference = WeakReference()
+    event: EventInheritor = EventInheritor()
 
     def __init__(
         self,
@@ -69,8 +91,10 @@ class BaseCallback(ABC):
         UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
         FUNCTION/STATICMETHOD: instance is None
         """
+        self.func_type = FunctionTypes.UNKNOWN  # we first set func_type since the setter of self.func may use it
         self.func: weakref.ReferenceType[Callable[[Event], None]] = func
         self.event: Event | Type[Event] = event
+
         self.func_type = check_function_type(func)
 
     @abstractmethod
@@ -98,7 +122,8 @@ class BaseCallback(ABC):
         instance_string = (
             str(self.func.__self__) if hasattr(self.func, "__self__") else "None"
         )
-        return f"Callback: {self.event} -> {self.func.__qualname__} ({instance_string}:{self.func_type})"
+        func_string = self.func.__qualname__ if self.func else self.func
+        return f"Callback: {self.event} -> {func_string} ({instance_string}:{self.func_type})"
 
 
 def subscribe_method(*event_types: Type[Event]):
