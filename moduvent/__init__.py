@@ -1,5 +1,5 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import Event, ModuleLoader, subscribe_method
+from .common import Event, ModuleLoader, SignalDict, subscribe_method
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
@@ -22,6 +22,8 @@ aemit = aevent_manager.emit
 
 module_loader = ModuleLoader()
 discover_modules = module_loader.discover_modules
+signal_dict = SignalDict()
+signal = signal_dict.signal
 
 __all__ = [
     EventAwareBase,
@@ -45,4 +47,5 @@ __all__ = [
     aclear_event_type,
     module_loader,
     discover_modules,
+    signal,
 ]

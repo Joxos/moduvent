@@ -44,6 +44,27 @@ class Event:
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
+class Signal(Event):
+    def __init__(self, sender: object = None):
+        self.sender = sender
+
+    def __repr__(self):
+        return f"Signal({self.__class__.__name__})"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class SignalDict(dict[str, Event]):
+    """A dict mapping names to signals."""
+
+    def signal(self, name: str) -> Signal:
+        if name not in self:
+            self[name] = type(name, (Signal,), {})
+
+        return self[name]
+
+
 class EventInheritor:
     def __set_name__(self, owner, name):
         self.public_name = name
