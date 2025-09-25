@@ -104,6 +104,10 @@ class BaseCallback(ABC):
 
         self.func_type = check_function_type(func)
 
+    def _report_function(self):
+        qualname = getattr(self.func, "__qualname__", self.func)
+        raise TypeError(f"Unknown function type for {qualname}")
+
     @abstractmethod
     def call(self):
         pass

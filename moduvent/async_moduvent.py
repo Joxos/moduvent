@@ -21,9 +21,7 @@ class AsyncCallback(BaseCallback):
         ]:
             await self.func(self.event)
         else:
-            async_moduvent_logger.exception(
-                f"Unknown function type for {self.func.__qualname__}"
-            )
+            self._report_function()
 
     def copy(self):
         # shallow copy

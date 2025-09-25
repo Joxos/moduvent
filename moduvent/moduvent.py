@@ -19,9 +19,7 @@ class Callback(BaseCallback):
         ]:
             self.func(self.event)
         else:
-            moduvent_logger.exception(
-                f"Unknown function type for {self.func.__qualname__}"
-            )
+            self._report_function()
 
     def copy(self):
         # shallow copy
