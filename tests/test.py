@@ -67,28 +67,35 @@ def test_error(event: TestEvent_1):
 
 
 if __name__ == "__main__":
+    event_manager.verbose_subscriptions()
     alice = TestClass_1(event_manager, "Alice")
     bob = TestClass_1(event_manager, "Bob")
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_1("hello"))
 
     remove_callback(alice.on_test_event, TestEvent_1)
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_1("hello without Alice"))
 
     register(test_error, TestEvent_1)
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_1("hello with test_error"))
 
     remove_callback(test_error, TestEvent_1)
     register(alice.on_test_event, TestEvent_1)
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_1("hello with Alice again and without test_error"))
 
     remove_function(test_func)
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_1("hello without test_func"))
 
-    register(test_func, TestEvent_2)
     register(alice.on_test_event, TestEvent_2)
+    event_manager.verbose_subscriptions()
     event_manager.emit(TestEvent_2("hello from TestEvent_2"))
 
     clear_event_type(TestEvent_2)
+    event_manager.verbose_subscriptions()
     event_manager.emit(
         TestEvent_2("hello without TestEvent_2 (this should not be printed)")
     )

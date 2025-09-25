@@ -55,6 +55,9 @@ class UserManager(EventAwareBase):
         # use your event data here!
         print(f"UserManager noticed login: {event.user_id}")
 
+    # !!IMPORTANT:
+    # When you are subscribing a static or class method, you should always KNOW WHAT YOU ARE DOING since the subscription will be registered every time the class is instantiated.
+    # This in most cases is not what you want.
     @subscribe_method(UserLoggedIn)
     @staticmethod
     def handle_user_login(event):

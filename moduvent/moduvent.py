@@ -45,7 +45,7 @@ class EventManager:
     def _verbose_callqueue(self):
         moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
         for callback in self._callqueue:
-            moduvent_logger.debug(f"{callback}")
+            moduvent_logger.debug(f"\t{callback}")
 
     def _process_callqueue(self):
         moduvent_logger.debug("Processing callqueue...")
@@ -63,6 +63,13 @@ class EventManager:
     def _register_callback(self, callback: Callback):
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
+
+    def verbose_subscriptions(self):
+        moduvent_logger.debug("Subscriptions:")
+        for event_type, callbacks in self._subscriptions.items():
+            moduvent_logger.debug(f"{event_type.__qualname__} ({len(callbacks)}):")
+            for callback in callbacks:
+                moduvent_logger.debug(f"\t{callback}")
 
     def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = Callback(func=func, event=event_type)
@@ -147,7 +154,7 @@ class EventMeta(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        _subscriptions: Dict[Type[Event], List[Callback]] = {}
+        _subscriptions: Dict[Type[Event], List[Callable[[Event], None]]] = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if hasattr(attr_value, "_subscriptions"):

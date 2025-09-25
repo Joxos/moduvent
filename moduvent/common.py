@@ -1,4 +1,5 @@
 import importlib
+import weakref
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from pathlib import Path
@@ -43,19 +44,32 @@ class Event:
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
+class WeakReference:
+    def __set__(self, obj, value):
+        obj._func_ref = (
+            weakref.WeakMethod(value)
+            if check_function_type(value) == FunctionTypes.BOUND_METHOD
+            else weakref.ref(value)
+        )
+
+    def __get__(self, obj, objtype=None):
+        return obj._func_ref() if obj else None
+
+
 class BaseCallback(ABC):
+    func = WeakReference()
+
     def __init__(
         self,
         func: Callable[[Event], None],
         event: Type[Event] | Event,
     ):
         """
-        BOUND_METHOD: instance is the instance
+        BOUND_METHOD: instance is the instance (BOUND_METHOD) or class (CLASSMETHOD)
         UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
-        CLASSMETHOD: instance is the class
         FUNCTION/STATICMETHOD: instance is None
         """
-        self.func: Callable[[Event], None] = func
+        self.func: weakref.ReferenceType[Callable[[Event], None]] = func
         self.event: Event | Type[Event] = event
         self.func_type = check_function_type(func)
 

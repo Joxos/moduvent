@@ -3,6 +3,7 @@ from .common import Event, ModuleLoader, subscribe_method
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
+verbose_subscriptions = event_manager.verbose_subscriptions
 register = event_manager.register
 subscribe = event_manager.subscribe
 remove_callback = event_manager.remove_callback
@@ -10,13 +11,14 @@ remove_function = event_manager.remove_function
 clear_event_type = event_manager.clear_event_type
 emit = event_manager.emit
 
-async_event_manager = AsyncEventManager()
-async_register = async_event_manager.register
-async_subscribe = async_event_manager.subscribe
-async_remove_callback = async_event_manager.remove_callback
-async_remove_function = async_event_manager.remove_function
-async_clear_event_type = async_event_manager.clear_event_type
-async_emit = async_event_manager.emit
+aevent_manager = AsyncEventManager()
+averbose_subscriptions = aevent_manager.verbose_subscriptions
+aregister = aevent_manager.register
+asubscribe = aevent_manager.subscribe
+aremove_callback = aevent_manager.remove_callback
+aremove_function = aevent_manager.remove_function
+aclear_event_type = aevent_manager.clear_event_type
+aemit = aevent_manager.emit
 
 module_loader = ModuleLoader()
 discover_modules = module_loader.discover_modules
@@ -35,12 +37,12 @@ __all__ = [
     emit,
     AsyncEventManager,
     AsyncEventAwareBase,
-    async_event_manager,
-    async_register,
-    async_subscribe,
-    async_remove_callback,
-    async_remove_function,
-    async_clear_event_type,
+    aevent_manager,
+    aregister,
+    asubscribe,
+    aremove_callback,
+    aremove_function,
+    aclear_event_type,
     module_loader,
     discover_modules,
 ]

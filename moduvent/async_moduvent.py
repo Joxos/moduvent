@@ -47,7 +47,7 @@ class AsyncEventManager:
     def _verbose_callqueue(self):
         async_moduvent_logger.debug(f"Callqueue ({self._callqueue.qsize()}):")
         for callback in self._callqueue:
-            async_moduvent_logger.debug(f"{callback}")
+            async_moduvent_logger.debug(f"\t{callback}")
 
     async def _process_callqueue(self):
         async_moduvent_logger.debug("Processing callqueue...")
@@ -67,6 +67,15 @@ class AsyncEventManager:
     async def _register_callback(self, callback: AsyncCallback):
         async with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
+
+    def verbose_subscriptions(self):
+        async_moduvent_logger.debug("Subscriptions:")
+        for event_type, callbacks in self._subscriptions.items():
+            async_moduvent_logger.debug(
+                f"{event_type.__qualname__} ({len(callbacks)}):"
+            )
+            for callback in callbacks:
+                async_moduvent_logger.debug(f"\t{callback}")
 
     async def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = AsyncCallback(func=func, event=event_type)
