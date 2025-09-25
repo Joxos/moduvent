@@ -137,6 +137,20 @@ class BaseCallback(ABC):
         return f"Callback: {self.event} -> {func_string} ({instance_string}:{self.func_type})"
 
 
+class CommonEventManager:
+    def _verbose_callqueue(self, size: int):
+        common_logger.debug(f"Callqueue ({size}):")
+        for callback in self._callqueue:
+            common_logger.debug(f"\t{callback}")
+
+    def verbose_subscriptions(self):
+        common_logger.debug("Subscriptions:")
+        for event_type, callbacks in self._subscriptions.items():
+            common_logger.debug(f"\t{event_type.__qualname__} ({len(callbacks)}):")
+            for callback in callbacks:
+                common_logger.debug(f"\t\t{callback}")
+
+
 def subscribe_method(*event_types: Type[Event]):
     """Tag the method with subscription info."""
     # Validate that all event_types are subclasses of Event

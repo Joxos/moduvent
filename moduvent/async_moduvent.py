@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, Event, FunctionTypes
+from .common import BaseCallback, CommonEventManager, Event, FunctionTypes
 
 logger.remove()
 logger.add(stdout, enqueue=True)
@@ -37,7 +37,7 @@ class AsyncCallback(BaseCallback):
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class AsyncEventManager:
+class AsyncEventManager(CommonEventManager):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[AsyncCallback]] = {}
         self._callqueue: asyncio.Queue[AsyncCallback] = asyncio.Queue()
@@ -45,9 +45,7 @@ class AsyncEventManager:
         self._callqueue_lock = asyncio.Lock()
 
     def _verbose_callqueue(self):
-        async_moduvent_logger.debug(f"Callqueue ({self._callqueue.qsize()}):")
-        for callback in self._callqueue:
-            async_moduvent_logger.debug(f"\t{callback}")
+        super()._verbose_callqueue(self._callqueue.qsize())
 
     async def _process_callqueue(self):
         async_moduvent_logger.debug("Processing callqueue...")
@@ -67,15 +65,6 @@ class AsyncEventManager:
     async def _register_callback(self, callback: AsyncCallback):
         async with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
-
-    def verbose_subscriptions(self):
-        async_moduvent_logger.debug("Subscriptions:")
-        for event_type, callbacks in self._subscriptions.items():
-            async_moduvent_logger.debug(
-                f"{event_type.__qualname__} ({len(callbacks)}):"
-            )
-            for callback in callbacks:
-                async_moduvent_logger.debug(f"\t{callback}")
 
     async def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = AsyncCallback(func=func, event=event_type)

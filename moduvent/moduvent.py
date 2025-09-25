@@ -4,7 +4,7 @@ from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, Event, FunctionTypes
+from .common import BaseCallback, CommonEventManager, Event, FunctionTypes
 
 logger.remove()
 moduvent_logger = logger.bind(source="moduvent_sync")
@@ -35,7 +35,7 @@ class Callback(BaseCallback):
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class EventManager:
+class EventManager(CommonEventManager):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[Callback]] = {}
         self._callqueue: Deque[Callback] = deque()
@@ -43,9 +43,7 @@ class EventManager:
         self._callqueue_lock = RLock()
 
     def _verbose_callqueue(self):
-        moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
-        for callback in self._callqueue:
-            moduvent_logger.debug(f"\t{callback}")
+        super()._verbose_callqueue(len(self._callqueue))
 
     def _process_callqueue(self):
         moduvent_logger.debug("Processing callqueue...")
@@ -63,13 +61,6 @@ class EventManager:
     def _register_callback(self, callback: Callback):
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
-
-    def verbose_subscriptions(self):
-        moduvent_logger.debug("Subscriptions:")
-        for event_type, callbacks in self._subscriptions.items():
-            moduvent_logger.debug(f"{event_type.__qualname__} ({len(callbacks)}):")
-            for callback in callbacks:
-                moduvent_logger.debug(f"\t{callback}")
 
     def register(self, func: Callable[[Event], None], event_type: Type[Event]):
         callback = Callback(func=func, event=event_type)

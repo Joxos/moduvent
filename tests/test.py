@@ -13,6 +13,7 @@ from moduvent import (
     remove_function,
     subscribe,
     subscribe_method,
+    verbose_subscriptions,
 )
 
 logger.add(
@@ -71,6 +72,7 @@ def test_error(event: TestEvent_1):
 if __name__ == "__main__":
     alice = TestClass_1(event_manager, "Alice")
     bob = TestClass_1(event_manager, "Bob")
+    verbose_subscriptions()
     emit(TestEvent_1("hello"))
 
     remove_callback(alice.on_test_event, TestEvent_1)
