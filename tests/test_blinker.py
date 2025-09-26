@@ -5,7 +5,8 @@ from moduvent import (
     register,
     signal,
     subscribe,
-    EventWithData,
+    DataEvent,
+    data_event,
 )
 from utils import CaptureOutput
 
@@ -23,7 +24,7 @@ def test_subscribing_to_signals():
     with CaptureOutput() as output:
 
         def subscriber(signal: Signal):
-            print(f"Got another signal sent by {signal.sender!r}")
+            print(f"Got a signal sent by {signal.sender!r}")
 
         ready = signal("ready")
         register(subscriber, ready)
@@ -47,31 +48,59 @@ def test_subscribing_to_signals():
         processor_a = Processor("a")
         processor_a.go()
         assert output.getlines() == [
-            "Got another signal sent by <Processor a>",
+            "Got a signal sent by <Processor a>",
             "Processing.",
         ]
 
         # test_subscribing_to_specific_senders
-        # TODO: implement event filtering
+        # moduvent does not originally support subscribing to specific senders.
+        # This is because filtering and judging complex conditions is hard to represent, error-prone and will slow down the system.
+        def b_subscriber(signal: Signal):
+            if signal.sender is processor_b:
+                print("Caught signal from processor_b.")
+
+        processor_b = Processor("b")
+        register(b_subscriber, ready)
+        processor_a.go()
+        assert output.getlines() == [
+            "Got a signal sent by <Processor a>",
+            "Processing.",
+        ]
+        processor_b.go()
+        assert output.getlines() == [
+            "Got a signal sent by <Processor b>",
+            "Caught signal from processor_b.",
+            "Processing.",
+        ]
 
 
 def test_sending_and_receiving_data_through_signals():
     with CaptureOutput() as output:
+        # In blinker, data is sent nonstandardly through a accompanied dict, which is not recommended by moduvent.
+        # You should always define your own class for data, which is more flexible and can be checked by the IDE.
+        # Even though, moduvent still provides a data_event function for convenience, which you can pass any data as an argument.
+        send_data_event = data_event("send-data")
+        receive_data_event = data_event("receive-data")
 
-        @subscribe(EventWithData)
-        def receive_data(event: EventWithData):
-            if event.sender is None:
-                print(f"Caught signal from None, data {event.data}")
-                emit(EventWithData("received!", receive_data))
+        # In blinker, signals are connected through @send_data.connect
+        # In moduvent, you should use @subscribe(send_data_event) instead.
+        # This is more flexible when you need to subscribe to multiple signals.
+        @subscribe(send_data_event)
+        def receive_data(event: DataEvent):
+            print(f"Caught signal from None, data {event.data}")
+            emit(receive_data_event("received!", receive_data))
 
-        @subscribe(EventWithData)
-        def capture_result(event: EventWithData):
-            if event.sender is receive_data:
-                print(f"Caught signal from receive_data, data {event.data}")
-                assert event.sender is receive_data
-                assert event.data == "received!"
+        # blinker returns the result directly from an event.
+        # However, an event may provoke a chain of events to achieve a complex functionality in moduvent.
+        # So, moduvent does not return the result directly when emitting an event.
+        # Instead, a callback may be used to capture the specific result you need.
+        @subscribe(receive_data_event)
+        def capture_result(event: DataEvent):
+            print(f"Caught signal from receive_data, data {event.data}")
+            assert event.sender is receive_data
+            assert event.data == "received!"
 
-        emit(EventWithData({"abc": 123}))
+        emit(send_data_event({"abc": 123}))
         assert output.getlines() == [
             "Caught signal from None, data {'abc': 123}",
             "Caught signal from receive_data, data received!",

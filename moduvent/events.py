@@ -1,3 +1,6 @@
+import types
+
+
 class Event:
     """Base event class"""
 
@@ -6,26 +9,37 @@ class Event:
         attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
+class EventFactory[T](dict[str, T]):
+    """A factory to create new event classes inheriting from given base class but with customized name."""
+    base_class: type[Event] = Event
+
+    @classmethod
+    def create(cls, base_class: type[Event]) -> "EventFactory[T]":
+        instance = cls[T]()
+        instance.base_class = base_class
+        return instance
+
+    def new(self, name: str):
+        if name not in self:
+            self[name] = types.new_class(name, (self.base_class,), {})
+
+        return self[name]
 
 class Signal(Event):
+    """Signal is an event with only a sender"""
     def __init__(self, sender: object = None):
         self.sender = sender
 
     def __str__(self):
         return f"Signal({self.__class__.__name__})"
 
-
-class SignalDict(dict[str, Event]):
-    """A dict mapping names to signals."""
-
-    def signal(self, name: str) -> Signal:
-        if name not in self:
-            self[name] = type(name, (Signal,), {})
-
-        return self[name]
+SignalFactory = EventFactory.create(Signal)
 
 
-class EventWithData(Signal):
+class DataEvent(Signal):
+    """An event with data and a sender"""
     def __init__(self, data, sender: object = None):
         self.data = data
         self.sender = sender
+
+DataEventFactory = EventFactory.create(DataEvent)
