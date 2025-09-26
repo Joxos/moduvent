@@ -11,6 +11,8 @@ from .events import Event
 
 common_logger = logger.bind(source="moduvent_common")
 
+def is_class_and_subclass(obj, cls):
+    return isinstance(obj, type) and issubclass(obj, cls)
 
 class FunctionTypes(Enum):
     STATICMETHOD = auto()
@@ -44,7 +46,7 @@ class EventInheritor:
 
     def __set__(self, obj, value):
         value_type = type(value)
-        if isinstance(value, type) or issubclass(value_type, Event):
+        if is_class_and_subclass(value, Event):
             setattr(obj, self.private_name, value)
         else:
             setattr(obj, self.private_name, None)
@@ -178,7 +180,7 @@ class CommonEventManager:
         if not args:
             raise ValueError("At least one event type must be provided")
 
-        if not (isinstance(args[0], type) and issubclass(args[0], Event)):
+        if not is_class_and_subclass(args[0], Event):
             raise ValueError("First argument must be an event type")
 
     def _get_subscription_strategy(self, *args, **kwargs):
@@ -189,11 +191,11 @@ class CommonEventManager:
         If arguments after the second argument is not same, then it will raise a ValueError.
         """
         self._handle_invalid_subscriptions(*args, **kwargs)
-        if len(args) == 1 and issubclass(args[0], Event):
+        if len(args) == 1 and is_class_and_subclass(args[0], Event):
             return self.SUBSCRIPTION_STRATEGY.EVENTS
-        all_events = issubclass(args[1], Event)
+        all_events = is_class_and_subclass(args[1], Event)
         for arg in args:
-            if all_events and not issubclass(arg, Event):
+            if all_events and not is_class_and_subclass(arg, Event):
                 raise ValueError(
                     f"Got {arg} among events (expect a inheritor of Event)"
                 )
@@ -227,7 +229,7 @@ class CommonEventManager:
             raise ValueError(
                 f"Either func or event_type must be provided (got func={func}, event_type={event_type})."
             )
-        if not callable(func) and not issubclass(event_type, Event):
+        if not callable(func) and not is_class_and_subclass(event_type, Event):
             raise ValueError(
                 f"Invalid argument type (func={func}, event_type={event_type})."
             )
@@ -262,7 +264,7 @@ def subscribe_method(*event_types: Type[Event]):
     """Tag the method with subscription info."""
     # Validate that all event_types are subclasses of Event
     for event_type in event_types:
-        if not isinstance(event_type, type) or not issubclass(event_type, Event):
+        if not is_class_and_subclass(event_type, Event):
             raise TypeError(
                 f"subscribe_method decorator expects Event subclasses, got {event_type!r}."
             )
