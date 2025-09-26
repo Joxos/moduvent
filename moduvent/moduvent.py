@@ -4,7 +4,7 @@ from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, CommonEventManager, FunctionTypes, check_function_type
+from .common import BaseCallback, CommonEventManager, FunctionTypes
 from .events import Event
 
 logger.remove()
@@ -29,7 +29,9 @@ class Callback(BaseCallback):
     def copy(self):
         # shallow copy
         if self.func and self.event:
-            return Callback(func=self.func, event=self.event, conditions=self.conditions)
+            return Callback(
+                func=self.func, event=self.event, conditions=self.conditions
+            )
         return None
 
     def __eq__(self, value):
@@ -67,7 +69,12 @@ class EventManager(CommonEventManager):
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
 
-    def register(self, func: Callable[[Event], None], event_type: Type[Event], *conditions: list[Callable[[Event], bool]]):
+    def register(
+        self,
+        func: Callable[[Event], None],
+        event_type: Type[Event],
+        *conditions: list[Callable[[Event], bool]],
+    ):
         callback = Callback(func=func, event=event_type, conditions=conditions)
         self._register_callback(callback)
         moduvent_logger.debug(f"Registered {callback}")
@@ -81,46 +88,53 @@ class EventManager(CommonEventManager):
         """
         if not args:
             raise ValueError("At least one event type must be provided")
-        
+
         if not (isinstance(args[0], type) and issubclass(args[0], Event)):
             raise ValueError("First argument must be an event type")
-        
+
         if len(args) == 1:
             event_type = args[0]
-            
+
             def decorator(func: Callable[[Event], None]):
                 self.register(func=func, event_type=event_type)
                 return func
+
             return decorator
-        
+
         second_arg = args[1]
-        
+
         if isinstance(second_arg, type) and issubclass(second_arg, Event):
             for arg in args:
                 if not (isinstance(arg, type) and issubclass(arg, Event)):
-                    raise ValueError("All arguments must be event types for multi-event subscription")
-            
+                    raise ValueError(
+                        "All arguments must be event types for multi-event subscription"
+                    )
+
             def decorator(func: Callable[[Event], None]):
                 for event_type in args:
                     self.register(func=func, event_type=event_type)
                 return func
+
             return decorator
         elif callable(second_arg):
             event_type = args[0]
             conditions = args[1:]
-            
+
             for condition in conditions:
                 if not callable(condition):
-                    raise ValueError("All arguments after the first must be callable conditions")
-            
+                    raise ValueError(
+                        "All arguments after the first must be callable conditions"
+                    )
+
             def decorator(func: Callable[[Event], None]):
                 self.register(func=func, event_type=event_type, conditions=conditions)
                 return func
+
             return decorator
         else:
-            raise ValueError("Second argument must be either an event type or a callable condition")
-
-
+            raise ValueError(
+                "Second argument must be either an event type or a callable condition"
+            )
 
     def remove_callback(self, func: Callable[[Event], None], event_type: Type[Event]):
         """Remove a callback from the list of subscriptions."""
@@ -149,6 +163,9 @@ class EventManager(CommonEventManager):
 
     def emit(self, event: Event):
         event_type = type(event)
+        if not event_type.enabled:
+            moduvent_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
+            return
         moduvent_logger.debug(f"Emitting {event}")
 
         if event_type in self._subscriptions:

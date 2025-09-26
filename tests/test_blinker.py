@@ -13,7 +13,6 @@ from loguru import logger
 import sys
 
 
-
 def test_decoupling_with_named_signals():
     # The blinker uses "is" to compare signals, which it claims to allow "unconnected parts of code to all use the same signal without requiring any code shareing or special imports"
     # However, this doesn't support diverse customized functions (like __str__), could cause problems of typo and cannot be checked by the IDE.
@@ -76,6 +75,7 @@ def test_subscribing_to_signals():
             "Processing.",
         ]
 
+
 def test_sending_and_receiving_data_through_signals():
     with CaptureOutput() as output:
         # In blinker, data is sent nonstandardly through a accompanied dict, which is not recommended by moduvent.
@@ -110,8 +110,17 @@ def test_sending_and_receiving_data_through_signals():
 
 
 def test_muting_signals():
-    # TODO: implement signal muting
-    pass
+    with CaptureOutput() as output:
+        sig = signal("send-data")
+
+        @subscribe(sig)
+        def receive_data(event: Signal):
+            print(f"Caught signal from {event.sender!r}")
+
+        with sig.muted():
+            emit(sig("muted"))
+        emit(sig("not muted"))
+        assert output.getlines() == ["Caught signal from 'not muted'"]
 
 
 def test_anonymous_signals():
