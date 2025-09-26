@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-VERSION = "3.1"
+VERSION = "4.0"
 setup(
     name="moduvent",
     version=VERSION,

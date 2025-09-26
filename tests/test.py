@@ -6,12 +6,14 @@ from moduvent import (
     Event,
     EventAwareBase,
     clear_event_type,
+    emit,
     event_manager,
     register,
     remove_callback,
     remove_function,
     subscribe,
     subscribe_method,
+    verbose_subscriptions,
 )
 
 logger.add(
@@ -19,6 +21,7 @@ logger.add(
     format="<green>{time}</green> | {extra[source]} | <level>{level}</level> | <level>{message}</level>",
     level="DEBUG",
 )
+main_logger = logger.bind(source="main")
 
 
 class TestEvent_1(Event):
@@ -69,26 +72,33 @@ def test_error(event: TestEvent_1):
 if __name__ == "__main__":
     alice = TestClass_1(event_manager, "Alice")
     bob = TestClass_1(event_manager, "Bob")
-    event_manager.emit(TestEvent_1("hello"))
+    verbose_subscriptions()
+    emit(TestEvent_1("hello"))
 
     remove_callback(alice.on_test_event, TestEvent_1)
-    event_manager.emit(TestEvent_1("hello without Alice"))
+    emit(TestEvent_1("hello without Alice"))
 
     register(test_error, TestEvent_1)
-    event_manager.emit(TestEvent_1("hello with test_error"))
+    emit(TestEvent_1("hello with test_error"))
 
     remove_callback(test_error, TestEvent_1)
     register(alice.on_test_event, TestEvent_1)
-    event_manager.emit(TestEvent_1("hello with Alice again and without test_error"))
+    emit(TestEvent_1("hello with Alice again and without test_error"))
 
     remove_function(test_func)
-    event_manager.emit(TestEvent_1("hello without test_func"))
+    emit(TestEvent_1("hello without test_func in Event_1"))
+    emit(TestEvent_2("hello without test_func in TestEvent_2"))
 
-    register(test_func, TestEvent_2)
     register(alice.on_test_event, TestEvent_2)
-    event_manager.emit(TestEvent_2("hello from TestEvent_2"))
+    emit(TestEvent_2("hello from TestEvent_2"))
+
+    del alice
+    register(bob.on_test_event, TestEvent_1)
+    try:
+        register(None, TestEvent_2)
+    except ValueError as e:
+        main_logger.exception(e)
+    emit(TestEvent_1("hello without Alice and with Bob"))
 
     clear_event_type(TestEvent_2)
-    event_manager.emit(
-        TestEvent_2("hello without TestEvent_2 (this should not be printed)")
-    )
+    emit(TestEvent_2("hello without TestEvent_2 (this should not be printed)"))

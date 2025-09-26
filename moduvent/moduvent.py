@@ -4,38 +4,31 @@ from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, Event, FunctionTypes
+from .common import BaseCallback, CommonEventManager, EventMeta
+from .events import Event
 
-logger.remove()
 moduvent_logger = logger.bind(source="moduvent_sync")
 
 
 class Callback(BaseCallback):
     def call(self):
-        if self.func_type in [
-            FunctionTypes.BOUND_METHOD,
-            FunctionTypes.FUNCTION,
-            FunctionTypes.STATICMETHOD,
-        ]:
+        if self._func_type_valid() and self._check_conditions():
             self.func(self.event)
         else:
-            moduvent_logger.exception(
-                f"Unknown function type for {self.func.__qualname__}"
-            )
+            self._report_function()
 
     def copy(self):
-        # shallow copy
-        return Callback(func=self.func, event=self.event)
+        return self._shallow_copy(Callback)
 
     def __eq__(self, value):
         if isinstance(value, Callback):
-            return self.func == value.func and self.event == value.event
+            return self._compare_attributes(value)
         return super().__eq__(value)
 
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class EventManager:
+class EventManager(CommonEventManager):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[Callback]] = {}
         self._callqueue: Deque[Callback] = deque()
@@ -43,9 +36,7 @@ class EventManager:
         self._callqueue_lock = RLock()
 
     def _verbose_callqueue(self):
-        moduvent_logger.debug(f"Callqueue ({len(self._callqueue)}):")
-        for callback in self._callqueue:
-            moduvent_logger.debug(f"{callback}")
+        super()._verbose_callqueue(len(self._callqueue))
 
     def _process_callqueue(self):
         moduvent_logger.debug("Processing callqueue...")
@@ -64,48 +55,56 @@ class EventManager:
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
 
-    def register(self, func: Callable[[Event], None], event_type: Type[Event]):
-        callback = Callback(func=func, event=event_type)
+    def register(
+        self,
+        func: Callable[[Event], None],
+        event_type: Type[Event],
+        *conditions: list[Callable[[Event], bool]],
+    ):
+        callback = Callback(func=func, event=event_type, conditions=conditions)
         self._register_callback(callback)
         moduvent_logger.debug(f"Registered {callback}")
 
-    def subscribe(self, *event_types: Type[Event]):
-        """This is used as a decorator to register a simple function."""
+    def subscribe(self, *args, **kwargs):
+        """subscribe dispatcher decorator.
+        The first argument must be an event type.
+        If the second argument is a function, then functions after that will be registered as conditions.
+        If the second argument is another event, then events after that will be registered as multi-callbacks.
+        If arguments after the second argument is not same, then it will raise a ValueError.
+        """
+        strategy = self._get_subscription_strategy(*args, **kwargs)
+        if strategy == self.SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def decorator(func: Callable[[Event], None]):
-            for event_type in event_types:
-                self.register(func=func, event_type=event_type)
-            return func
+            def decorator(func: Callable[[Event], None]):
+                for event_type in args:
+                    self.register(func=func, event_type=event_type)
+                return func
 
-        return decorator
+            return decorator
+        elif strategy == self.SUBSCRIPTION_STRATEGY.CONDITIONS:
+            event_type = args[0]
+            conditions = args[1:]
 
-    def remove_callback(self, func: Callable[[Event], None], event_type: Type[Event]):
-        """Remove a callback from the list of subscriptions."""
-        if event_type not in self._subscriptions:
-            return
+            def decorator(func: Callable[[Event], None]):
+                self.register(func=func, event_type=event_type, conditions=conditions)
+                return func
+
+            return decorator
+        else:
+            raise ValueError(f"Invalid subscription strategy {strategy}")
+
+    def unsubscribe(
+        self, func: Callable[[Event], None] = None, event_type: Type[Event] = None
+    ):
+        self._check_unregister_args(func, event_type)
         with self._subscription_lock:
-            for callback in self._subscriptions.get(event_type, []):
-                if callback.func == func:
-                    self._subscriptions[event_type].remove(callback)
-                    moduvent_logger.debug(f"Removed {callback}")
-
-    def remove_function(self, func: Callable[[Event], None]):
-        """Remove all callbacks for a function."""
-        with self._subscription_lock:
-            for callbacks in self._subscriptions.values():
-                for callback in callbacks:
-                    if callback.func == func:
-                        callbacks.remove(callback)
-        moduvent_logger.debug(f"Removed all callbacks for {func}")
-
-    def clear_event_type(self, event_type: Type[Event]):
-        with self._subscription_lock:
-            if event_type in self._subscriptions:
-                del self._subscriptions[event_type]
-                moduvent_logger.debug(f"Cleared all subscriptions for {event_type}")
+            self._process_unregister_logic(func, event_type)
 
     def emit(self, event: Event):
         event_type = type(event)
+        if not event_type.enabled:
+            moduvent_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
+            return
         moduvent_logger.debug(f"Emitting {event}")
 
         if event_type in self._subscriptions:
@@ -115,47 +114,19 @@ class EventManager:
             )
             for callback in callbacks:
                 callback_copy = callback.copy()
-                callback_copy.event = event
-                self._callqueue.append(callback_copy)
+                if callback_copy:
+                    callback_copy.event = event
+                    self._callqueue.append(callback_copy)
+                else:
+                    # the callback is no longer valid
+                    with self._subscription_lock:
+                        self._subscriptions[event_type].remove(callback)
+                    moduvent_logger.warning(
+                        f"Invalid callback {callback} has been removed before processing event."
+                    )
 
             self._verbose_callqueue()
             self._process_callqueue()
-
-
-def subscribe_method(*event_types: List[Type[Event]]):
-    """Tag the method with subscription info."""
-    # Validate that all event_types are subclasses of Event
-    for event_type in event_types:
-        if not isinstance(event_type, type) or not issubclass(event_type, Event):
-            raise TypeError(
-                f"subscribe_method decorator expects Event subclasses, got {event_type!r}."
-            )
-
-    def decorator(func):
-        if not hasattr(func, "_subscriptions"):
-            func._subscriptions = []  # note that function member does not support type hint
-        func._subscriptions.extend(event_types)
-        moduvent_logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
-        return func
-
-    return decorator
-
-
-class EventMeta(type):
-    """Define a new class with events info gathered after class creation."""
-
-    def __new__(cls, name, bases, attrs):
-        new_class = super().__new__(cls, name, bases, attrs)
-
-        _subscriptions: Dict[Type[Event], List[Callback]] = {}
-        for attr_name, attr_value in attrs.items():
-            # find all subscriptions of methods
-            if hasattr(attr_value, "_subscriptions"):
-                for event_type in attr_value._subscriptions:
-                    _subscriptions.setdefault(event_type, []).append(attr_value)
-
-        new_class._subscriptions = _subscriptions
-        return new_class
 
 
 class EventAwareBase(metaclass=EventMeta):
