@@ -1,16 +1,18 @@
+import sys
+
+from loguru import logger
+from utils import CaptureOutput
+
 from moduvent import (
+    DataEvent,
     Signal,
+    data_event,
     emit,
     event_manager,
     register,
     signal,
     subscribe,
-    DataEvent,
-    data_event,
 )
-from utils import CaptureOutput
-from loguru import logger
-import sys
 
 
 def test_decoupling_with_named_signals():
@@ -142,6 +144,7 @@ def test_anonymous_signals():
     # test_connect_as_a_decorator
     with CaptureOutput() as output:
         apc = AltProcessor("c")
+
         @subscribe(apc.on_complete)
         def completed(event: Signal):
             print(f"AltProcessor {event.sender.name} completed!")
@@ -152,6 +155,7 @@ def test_anonymous_signals():
             "AltProcessor c completed!",
         ]
 
+
 def test_optimizing_signal_sending():
     # In blinker, you can check if a signal is connected before sending it, which can improve performance.
     # However, in moduvent, it is reguarded as poor-designed that the developers don't know whether they should create a signal or not.
@@ -159,6 +163,7 @@ def test_optimizing_signal_sending():
     # However, you can do this anyway by checking some_signal in event_manager._subscriptions and event_manager._subscriptions[signal("some_signal")]
     # We skip this test for now.
     pass
+
 
 if __name__ == "__main__":
     logger.remove()
