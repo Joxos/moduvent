@@ -31,7 +31,7 @@ class Signal(Event):
         self.sender = sender
 
     def __str__(self):
-        return f"Signal({self.__class__.__name__})"
+        return f"Signal({self.__class__.__name__}, sender={self.sender})"
 
 SignalFactory = EventFactory.create(Signal)
 

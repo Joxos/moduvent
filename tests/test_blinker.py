@@ -9,6 +9,9 @@ from moduvent import (
     data_event,
 )
 from utils import CaptureOutput
+from loguru import logger
+import sys
+
 
 
 def test_decoupling_with_named_signals():
@@ -53,14 +56,14 @@ def test_subscribing_to_signals():
         ]
 
         # test_subscribing_to_specific_senders
-        # moduvent does not originally support subscribing to specific senders.
-        # This is because filtering and judging complex conditions is hard to represent, error-prone and will slow down the system.
+        # moduvent does not encorage you to subscribe to specific senders.
+        # This is because complex conditions are hard to represent, error-prone and will slow down the system.
         def b_subscriber(signal: Signal):
-            if signal.sender is processor_b:
-                print("Caught signal from processor_b.")
+            print("Caught signal from processor_b.")
 
         processor_b = Processor("b")
-        register(b_subscriber, ready)
+        # function register accept zero or multiple conditions after the two common subscription arguments.
+        register(b_subscriber, ready, lambda s: s.sender is processor_b)
         processor_a.go()
         assert output.getlines() == [
             "Got a signal sent by <Processor a>",
@@ -72,7 +75,6 @@ def test_subscribing_to_signals():
             "Caught signal from processor_b.",
             "Processing.",
         ]
-
 
 def test_sending_and_receiving_data_through_signals():
     with CaptureOutput() as output:
@@ -118,4 +120,8 @@ def test_anonymous_signals():
 
 
 if __name__ == "__main__":
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG")
+    test_decoupling_with_named_signals()
+    test_subscribing_to_signals()
     test_sending_and_receiving_data_through_signals()

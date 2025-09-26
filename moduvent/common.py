@@ -82,6 +82,7 @@ class BaseCallback(ABC):
         self,
         func: Callable[[Event], None],
         event: Type[Event] | Event,
+        conditions: list[Callable[[Event], bool]] = None,
     ):
         """
         BOUND_METHOD: instance is the instance (BOUND_METHOD) or class (CLASSMETHOD)
@@ -93,6 +94,7 @@ class BaseCallback(ABC):
         )  # we first set func_type since the setter of self.func may use it
         self.func: weakref.ReferenceType[Callable[[Event], None]] = func
         self.event: Event | Type[Event] = event
+        self.conditions = conditions if conditions else []
 
         self.func_type = check_function_type(func)
 

@@ -4,7 +4,7 @@ from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, CommonEventManager, FunctionTypes
+from .common import BaseCallback, CommonEventManager, FunctionTypes, check_function_type
 from .events import Event
 
 logger.remove()
@@ -18,6 +18,10 @@ class Callback(BaseCallback):
             FunctionTypes.FUNCTION,
             FunctionTypes.STATICMETHOD,
         ]:
+            for condition in self.conditions:
+                if not condition(self.event):
+                    moduvent_logger.debug(f"Condition {condition} not met, skipping.")
+                    return
             self.func(self.event)
         else:
             self._report_function()
@@ -25,7 +29,7 @@ class Callback(BaseCallback):
     def copy(self):
         # shallow copy
         if self.func and self.event:
-            return Callback(func=self.func, event=self.event)
+            return Callback(func=self.func, event=self.event, conditions=self.conditions)
         return None
 
     def __eq__(self, value):
@@ -63,20 +67,60 @@ class EventManager(CommonEventManager):
         with self._subscription_lock:
             self._subscriptions.setdefault(callback.event, []).append(callback)
 
-    def register(self, func: Callable[[Event], None], event_type: Type[Event]):
-        callback = Callback(func=func, event=event_type)
+    def register(self, func: Callable[[Event], None], event_type: Type[Event], *conditions: list[Callable[[Event], bool]]):
+        callback = Callback(func=func, event=event_type, conditions=conditions)
         self._register_callback(callback)
         moduvent_logger.debug(f"Registered {callback}")
 
-    def subscribe(self, *event_types: Type[Event]):
-        """This is used as a decorator to register a simple function."""
-
-        def decorator(func: Callable[[Event], None]):
-            for event_type in event_types:
+    def subscribe(self, *args, **kwargs):
+        """subscribe dispatcher decorator.
+        The first argument must be an event type.
+        If the second argument is a function, then functions after that will be registered as conditions.
+        If the second argument is another event, then events after that will be registered as multi-callbacks.
+        If arguments after the second argument is not same, then it will raise a ValueError.
+        """
+        if not args:
+            raise ValueError("At least one event type must be provided")
+        
+        if not (isinstance(args[0], type) and issubclass(args[0], Event)):
+            raise ValueError("First argument must be an event type")
+        
+        if len(args) == 1:
+            event_type = args[0]
+            
+            def decorator(func: Callable[[Event], None]):
                 self.register(func=func, event_type=event_type)
-            return func
+                return func
+            return decorator
+        
+        second_arg = args[1]
+        
+        if isinstance(second_arg, type) and issubclass(second_arg, Event):
+            for arg in args:
+                if not (isinstance(arg, type) and issubclass(arg, Event)):
+                    raise ValueError("All arguments must be event types for multi-event subscription")
+            
+            def decorator(func: Callable[[Event], None]):
+                for event_type in args:
+                    self.register(func=func, event_type=event_type)
+                return func
+            return decorator
+        elif callable(second_arg):
+            event_type = args[0]
+            conditions = args[1:]
+            
+            for condition in conditions:
+                if not callable(condition):
+                    raise ValueError("All arguments after the first must be callable conditions")
+            
+            def decorator(func: Callable[[Event], None]):
+                self.register(func=func, event_type=event_type, conditions=conditions)
+                return func
+            return decorator
+        else:
+            raise ValueError("Second argument must be either an event type or a callable condition")
 
-        return decorator
+
 
     def remove_callback(self, func: Callable[[Event], None], event_type: Type[Event]):
         """Remove a callback from the list of subscriptions."""
