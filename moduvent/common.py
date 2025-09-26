@@ -8,7 +8,6 @@ from typing import Callable, Type
 from loguru import logger
 from .events import Event
 
-logger.remove()
 common_logger = logger.bind(source="moduvent_common")
 
 
