@@ -124,9 +124,41 @@ def test_muting_signals():
 
 
 def test_anonymous_signals():
-    # TODO: implement anonymous signals
-    pass
+    class AltProcessor:
+        on_ready = signal()
+        on_complete = signal()
 
+        def __init__(self, name):
+            self.name = name
+
+        def go(self):
+            emit(self.on_ready(self))
+            print("Alternate processing.")
+            emit(self.on_complete(self))
+
+        def __repr__(self):
+            return f"<AltProcessor {self.name}>"
+
+    # test_connect_as_a_decorator
+    with CaptureOutput() as output:
+        apc = AltProcessor("c")
+        @subscribe(apc.on_complete)
+        def completed(event: Signal):
+            print(f"AltProcessor {event.sender.name} completed!")
+
+        apc.go()
+        assert output.getlines() == [
+            "Alternate processing.",
+            "AltProcessor c completed!",
+        ]
+
+def test_optimizing_signal_sending():
+    # In blinker, you can check if a signal is connected before sending it, which can improve performance.
+    # However, in moduvent, it is reguarded as poor-designed that the developers don't know whether they should create a signal or not.
+    # So, moduvent does not have any plan to implement specific helpers about this at least for now.
+    # However, you can do this anyway by checking some_signal in event_manager._subscriptions and event_manager._subscriptions[signal("some_signal")]
+    # We skip this test for now.
+    pass
 
 if __name__ == "__main__":
     logger.remove()

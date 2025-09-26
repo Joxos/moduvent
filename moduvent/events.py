@@ -1,4 +1,5 @@
 import types
+from uuid import uuid4 as uuid
 
 
 class MutedContext:
@@ -41,7 +42,9 @@ class EventFactory[T](dict[str, T]):
         instance.base_class = base_class
         return instance
 
-    def new(self, name: str):
+    def new(self, name: str = None):
+        if not name:
+            name = f"{self.base_class.__name__}_{str(uuid())}"
         if name not in self:
             self[name] = types.new_class(name, (self.base_class,), {})
 

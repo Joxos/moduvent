@@ -205,11 +205,7 @@ logger.add(
 
 ## TODOs
 
-- Event filters
-
 - Event priorities and consequences
-
-- Customized callback arguments
 
 - Customized exception handling
 
@@ -218,6 +214,8 @@ logger.add(
 - Optimized data structures of _subscriptions
 
 - Handling duplicate subscriptions
+
+- Documentation of events
 
 ## Contributing
 
