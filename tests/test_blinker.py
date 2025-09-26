@@ -1,24 +1,13 @@
-from io import StringIO
-
 from moduvent import (
-    Event,
-    clear_event_type,
+    Signal,
     emit,
     event_manager,
     register,
     signal,
     subscribe,
+    EventWithData,
 )
-
-output = StringIO()
-
-
-def convert_output():
-    global output
-    result = output.getvalue().split("\n")
-    output.close()
-    output = StringIO()
-    return result[:-1]  # remove the last empty line
+from utils import CaptureOutput
 
 
 def test_decoupling_with_named_signals():
@@ -31,40 +20,73 @@ def test_decoupling_with_named_signals():
 
 
 def test_subscribing_to_signals():
-    def subscriber(signal: Event):
-        print(f"Got another signal sent by {signal.sender!r}")
+    with CaptureOutput() as output:
 
-    ready = signal("ready")
-    register(subscriber, ready)
-    assert event_manager._subscriptions[ready] == [subscriber]
-    clear_event_type(ready)
-    assert ready not in event_manager._subscriptions
+        def subscriber(signal: Signal):
+            print(f"Got another signal sent by {signal.sender!r}")
 
-    # In moduvent, you can also use a modern way to subscribe a function to a signal:
-    @subscribe(ready)
-    def modern_subscriber(signal: Event):
-        print(f"Got another signal sent by {signal.sender!r}", file=output)
+        ready = signal("ready")
+        register(subscriber, ready)
+        assert event_manager._subscriptions[ready] == [subscriber]
 
-    assert event_manager._subscriptions[ready] == [modern_subscriber]
+        # test_emitting_signals
+        class Processor:
+            def __init__(self, name):
+                self.name = name
 
-    # test_emitting_signals
-    class Processor:
-        def __init__(self, name):
-            self.name = name
+            def go(self):
+                ready = signal("ready")
+                emit(ready(self))
+                print("Processing.")
+                complete = signal("complete")
+                emit(complete(self))
 
-        def go(self):
-            ready = signal("ready")
-            emit(ready(self))
-            print("Processing.", file=output)
-            complete = signal("complete")
-            emit(complete(self))
+            def __repr__(self):
+                return f"<Processor {self.name}>"
 
-        def __repr__(self):
-            return f"<Processor {self.name}>"
+        processor_a = Processor("a")
+        processor_a.go()
+        assert output.getlines() == [
+            "Got another signal sent by <Processor a>",
+            "Processing.",
+        ]
 
-    processor_a = Processor("a")
-    processor_a.go()
-    assert convert_output() == [
-        "Got another signal sent by <Processor a>",
-        "Processing.",
-    ]
+        # test_subscribing_to_specific_senders
+        # TODO: implement event filtering
+
+
+def test_sending_and_receiving_data_through_signals():
+    with CaptureOutput() as output:
+
+        @subscribe(EventWithData)
+        def receive_data(event: EventWithData):
+            if event.sender is None:
+                print(f"Caught signal from None, data {event.data}")
+                emit(EventWithData("received!", receive_data))
+
+        @subscribe(EventWithData)
+        def capture_result(event: EventWithData):
+            if event.sender is receive_data:
+                print(f"Caught signal from receive_data, data {event.data}")
+                assert event.sender is receive_data
+                assert event.data == "received!"
+
+        emit(EventWithData({"abc": 123}))
+        assert output.getlines() == [
+            "Caught signal from None, data {'abc': 123}",
+            "Caught signal from receive_data, data received!",
+        ]
+
+
+def test_muting_signals():
+    # TODO: implement signal muting
+    pass
+
+
+def test_anonymous_signals():
+    # TODO: implement anonymous signals
+    pass
+
+
+if __name__ == "__main__":
+    test_sending_and_receiving_data_through_signals()

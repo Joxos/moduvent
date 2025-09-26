@@ -1,6 +1,7 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import Event, ModuleLoader, SignalDict, subscribe_method
+from .common import ModuleLoader, subscribe_method
 from .moduvent import EventAwareBase, EventManager
+from .events import Event, Signal, SignalDict, EventWithData
 
 event_manager = EventManager()
 verbose_subscriptions = event_manager.verbose_subscriptions
@@ -29,6 +30,7 @@ __all__ = [
     EventAwareBase,
     EventManager,
     Event,
+    EventWithData,
     ModuleLoader,
     register,
     subscribe,
@@ -47,5 +49,6 @@ __all__ = [
     aclear_event_type,
     module_loader,
     discover_modules,
+    Signal,
     signal,
 ]

@@ -5,7 +5,8 @@ from typing import Callable, Dict, List, Type
 
 from loguru import logger
 
-from .common import BaseCallback, CommonEventManager, Event, FunctionTypes
+from .common import BaseCallback, CommonEventManager, FunctionTypes
+from .events import Event
 
 logger.remove()
 logger.add(stdout, enqueue=True)
