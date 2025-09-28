@@ -1,4 +1,4 @@
-import types
+from types import new_class
 from uuid import uuid4 as uuid
 
 
@@ -21,9 +21,9 @@ class Event:
     enabled: bool = True
 
     @classmethod
-    def muted(self):
+    def muted(cls):
         """Return a context manager to temporarily mute the event"""
-        return MutedContext(self)
+        return MutedContext(cls)
 
     def __str__(self):
         # get all attributes without the ones starting with __
@@ -31,14 +31,14 @@ class Event:
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
-class EventFactory[T](dict[str, T]):
+class EventFactory(dict[str, object]):
     """A factory to create new event classes inheriting from given base class but with customized name."""
 
     base_class: type[Event] = Event
 
     @classmethod
-    def create(cls, base_class: type[Event]) -> "EventFactory[T]":
-        instance = cls[T]()
+    def create(cls, base_class: type[Event]):
+        instance = cls()
         instance.base_class = base_class
         return instance
 
@@ -46,7 +46,7 @@ class EventFactory[T](dict[str, T]):
         if not name:
             name = f"{self.base_class.__name__}_{str(uuid())}"
         if name not in self:
-            self[name] = types.new_class(name, (self.base_class,), {})
+            self[name] = new_class(name, (self.base_class,))
 
         return self[name]
 
