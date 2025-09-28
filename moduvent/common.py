@@ -373,6 +373,9 @@ class BaseEventManager(ABC):
         self._unsubscribe_process_logic(func, event_type)
 
     def emit(self, event: Event):
+        if not is_instance_and_subclass(event):
+            common_logger.warning(f"Skipping non-instance event: {event}")
+            return
         event_type = type(event)
         if not event_type.enabled:
             common_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
