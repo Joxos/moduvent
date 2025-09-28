@@ -25,7 +25,10 @@ class CallbackRegistry(BaseCallbackRegistry):
 class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
     def call(self):
         if super().call():
-            self.func(self.event)
+            try:
+                self.func(self.event)
+            except Exception as e:
+                moduvent_logger.exception(f"Error while processing callback: {e}")
 
 
 # We say that a subscription is the information that a method wants to be called back

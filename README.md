@@ -92,15 +92,15 @@ You can unsubscribe subscriptions in many ways:
 
 ```python
 # Unsubscribe a function from an event type
-remove_callback(handle_user_login, UserLoggedIn)
+unsubscribe(handle_user_login, UserLoggedIn)
 # or
-remove_callback(a_user_manager_instance.handle_user_login, UserLoggedIn)
+unsubscribe(a_user_manager_instance.handle_user_login, UserLoggedIn)
 
 # Unsubscribe a function from all event types
-remove_function(handle_user_login)
+unsubscribe(handle_user_login)
 
 # Unsubscribe all functions from an event type
-clear_event_type(UserLoggedIn)
+unsubscribe(UserLoggedIn)
 ```
 
 ### Module System
@@ -139,35 +139,7 @@ When it comes to detailed configuration, please refer to the [loguru documentati
 
 ## API Reference
 
-### Core Classes
-
-- `Event`: Base class for all events
-
-- `EventManager`: Central event system coordinator
-
-- `EventAwareBase`: Base class for event-handling components
-
-- `ModuleLoader`: Dynamic module loader
-
-### Decorators
-
-- `subscribe(*event_types)`: Decorator for functions to subscribe to events
-
-- `subscribe_method(*event_types)`: Decorator for class methods
-
-### Functions
-
-- `register(func: Callable[[Event], None], event_type: Type[Event])`: Register a function as an event handler
-
-- `emit(event)`: Emit an event to all subscribers
-
-- `discover_modules(modules_dir="modules")`: Discover and load modules from a directory
-
-- `remove_callback(func: Callable[[Event], None], event_type: Type[Event])`: Unsubscribe a function from an event type
-
-- `remove_function(func: Callable[[Event], None])`: Unsubscribe a function from all event types
-
-- `clear_event_type(event_type: Type[Event])`: Unsubscribe all functions from an event type
+TODO
 
 ### Module Structure
 

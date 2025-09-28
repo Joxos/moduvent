@@ -1,6 +1,6 @@
 [project]
 name = "moduvent"
-version = "4.0"
+version = "4.1"
 authors = [
     { name = "Joxos", email = "xujunhao61@163.com" }
 ]

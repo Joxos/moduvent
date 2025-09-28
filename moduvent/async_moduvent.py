@@ -25,7 +25,7 @@ class AsyncCallbackRegistry(BaseCallbackRegistry):
 class AsyncCallbackProcessing(BaseCallbackProcessing, AsyncCallbackRegistry):
     async def call(self):
         if super().call():
-            await self.func.call(self.event)
+            await self.func(self.event)
 
 
 # We say that a subscription is the information that a method wants to be called back
@@ -112,7 +112,8 @@ class AsyncEventManager(BaseEventManager):
         super().unsubscribe(func=func, event_type=event_type)
 
     async def emit(self, event: Event):
-        super().emit(event)
+        self._emit(event)
+        await self._process_callqueue()
 
 
 class AsyncEventAwareBase(metaclass=EventMeta):

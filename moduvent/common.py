@@ -70,7 +70,7 @@ class Checker:
                         value_type=type(value),
                     )
                 )
-            setattr(obj, self.private_name, value)
+        setattr(obj, self.private_name, value)
 
     def __get__(self, obj, objtype=None):
         return getattr(obj, self.private_name)
@@ -99,8 +99,10 @@ class WeakReference:
             else:
                 try:
                     obj._func_ref = weakref.ref(value)
-                except TypeError:
-                    raise TypeError(f"Cannot set weak reference of {value} to {obj}")
+                except TypeError as e:
+                    raise TypeError(
+                        f"Cannot set weak reference of {value} to {obj}"
+                    ) from e
 
     def __get__(self, obj, objtype=None):
         ref = obj._func_ref
@@ -147,7 +149,7 @@ class BaseCallbackRegistry(ABC):
     def _shallow_copy(self, subclass: Type["BaseCallbackRegistry"]):
         if self.func and self.event:
             return subclass(
-                func=self.func,
+                func=self.func,  # the weakref is valid or not is checked by the setter of subclass
                 event=self.event,
                 conditions=self.conditions,
             )
@@ -335,10 +337,6 @@ class BaseEventManager(ABC):
         """
         return self._get_callback_class(callback_type)(*args, **kwargs)
 
-    def _post_emit(self):
-        self._verbose_callqueue()
-        self._process_callqueue()
-
     @abstractmethod
     def _process_callqueue(self): ...
 
@@ -372,7 +370,7 @@ class BaseEventManager(ABC):
         self._unsubscribe_check_args(func, event_type)
         self._unsubscribe_process_logic(func, event_type)
 
-    def emit(self, event: Event):
+    def _emit(self, event: Event):
         if not is_instance_and_subclass(event):
             common_logger.warning(f"Skipping non-instance event: {event}")
             return
@@ -381,7 +379,6 @@ class BaseEventManager(ABC):
             common_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
             return
         common_logger.debug(f"Emitting {event}")
-
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
             common_logger.debug(
@@ -395,8 +392,11 @@ class BaseEventManager(ABC):
                         event=event,
                     )
                 )
+        self._verbose_callqueue()
 
-            self._post_emit()
+    def emit(self, event: Event):
+        self._emit(event)
+        self._process_callqueue()
 
 
 def subscribe_method(*event_types: Type[Event]):
