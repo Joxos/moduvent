@@ -333,7 +333,6 @@ class BaseEventManager(ABC):
     def _create(self, callback_type: CALLBACK_TYPE, *args, **kwargs):
         """
         Create a new instance of the subclass.
-        Used in self.emit
         """
         return self._get_callback_class(callback_type)(*args, **kwargs)
 
@@ -370,13 +369,19 @@ class BaseEventManager(ABC):
         self._unsubscribe_check_args(func, event_type)
         self._unsubscribe_process_logic(func, event_type)
 
-    def _emit(self, event: Event):
+    def _emit_check(self, event: Event):
         if not is_instance_and_subclass(event):
             common_logger.warning(f"Skipping non-instance event: {event}")
-            return
+            return False, event
         event_type = type(event)
         if not event_type.enabled:
             common_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
+            return False, event_type
+        return True, event_type
+
+    def emit(self, event: Event):
+        valid, event_type = self._emit_check(event)
+        if not valid:
             return
         common_logger.debug(f"Emitting {event}")
         if event_type in self._subscriptions:
@@ -392,10 +397,8 @@ class BaseEventManager(ABC):
                         event=event,
                     )
                 )
-        self._verbose_callqueue()
 
-    def emit(self, event: Event):
-        self._emit(event)
+        self._verbose_callqueue()
         self._process_callqueue()
 
 

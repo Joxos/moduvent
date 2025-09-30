@@ -1,14 +1,20 @@
+import asyncio
 import sys
+import tracemalloc
 
+import pytest
 from loguru import logger
 from utils import CaptureOutput
 
 from moduvent import (
     DataEvent,
     Signal,
+    aemit,
+    asubscribe,
     data_event,
     emit,
     event_manager,
+    initialize,
     register,
     signal,
     subscribe,
@@ -155,6 +161,20 @@ def test_anonymous_signals():
             "AltProcessor c completed!",
         ]
 
+    # The form of `connect`` decorator in blinker unfortunately does not allow extra arguments and it uses `connect_via` instead.
+    # Luckily, you don't need to do this in moduvent since moduvent pass an Event object to the callback, which can be customized with extra attributes.
+    dice_roll = signal("dice_roll")
+
+    @subscribe(dice_roll)
+    def roll_dice(event: Signal):
+        print(f"Observed dice roll {event.sender}")
+
+    with CaptureOutput() as output:
+        emit(dice_roll(3))
+        assert output.getlines() == [
+            "Observed dice roll 3",
+        ]
+
 
 def test_optimizing_signal_sending():
     # In blinker, you can check if a signal is connected before sending it, which can improve performance.
@@ -162,12 +182,34 @@ def test_optimizing_signal_sending():
     # So, moduvent does not have any plan to implement specific helpers about this at least for now.
     # However, you can do this anyway by checking some_signal in event_manager._subscriptions and event_manager._subscriptions[signal("some_signal")]
     # We skip this test for now.
-    pass
+    ...
+
+
+def test_documenting_signals():
+    # TODO
+    ...
+
+
+@pytest.mark.asyncio
+async def test_async_receivers():
+    sig = signal()
+
+    @asubscribe(sig)
+    async def receiver(event: Signal):
+        print(f"Caught signal from {event.sender!r}")
+
+    with CaptureOutput() as output:
+        await initialize()
+        await aemit(sig("async"))
+        assert output.getlines() == ["Caught signal from 'async'"]
+
+
+async def main():
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG")
+    tracemalloc.start()
+    await test_async_receivers()
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.add(sys.stderr, level="DEBUG")
-    test_decoupling_with_named_signals()
-    test_subscribing_to_signals()
-    test_sending_and_receiving_data_through_signals()
+    asyncio.run(main())

@@ -1,6 +1,6 @@
 [project]
 name = "moduvent"
-version = "4.1"
+version = "4.2"
 authors = [
     { name = "Joxos", email = "xujunhao61@163.com" }
 ]
@@ -10,3 +10,6 @@ requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
 ]
+
+[dependency-groups]
+dev = []

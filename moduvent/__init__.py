@@ -16,6 +16,7 @@ aregister = aevent_manager.register
 asubscribe = aevent_manager.subscribe
 aunsubscribe = aevent_manager.unsubscribe
 aemit = aevent_manager.emit
+initialize = aevent_manager.initialize
 
 module_loader = ModuleLoader()
 discover_modules = module_loader.discover_modules
@@ -45,4 +46,5 @@ __all__ = [
     "signal",
     "DataEvent",
     "data_event",
+    "initialize",
 ]
