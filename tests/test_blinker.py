@@ -199,9 +199,35 @@ async def test_async_receivers():
         print(f"Caught signal from {event.sender!r}")
 
     with CaptureOutput() as output:
+        # blinder does not seem to check whether a subscriber in main async loop or not.
+        # In moduvent however, we require you to initialize the async event manager explicitly with initialize()
+        # Note that the realization is likely to be buggy if in multi-threaded environment.
         await initialize()
         await aemit(sig("async"))
         assert output.getlines() == ["Caught signal from 'async'"]
+        # blinker allows you to wrap a coroutine into a synchronous function which directly calls asyncio.run()
+        # We reguard this a wierd design and skip this.
+
+
+def test_call_receivers_in_order_of_registration():
+    # In synchronous version of moduvent this is originally supported.
+    # No need extra component.
+    sig = signal()
+
+    @subscribe(sig)
+    def receiver1(event: Signal):
+        print(f"Caught signal from {event.sender!r} (receiver1)")
+
+    @subscribe(sig)
+    def receiver2(event: Signal):
+        print(f"Caught signal from {event.sender!r} (receiver2)")
+
+    with CaptureOutput() as output:
+        emit(sig("order"))
+        assert output.getlines() == [
+            "Caught signal from 'order' (receiver1)",
+            "Caught signal from 'order' (receiver2)",
+        ]
 
 
 async def main():
