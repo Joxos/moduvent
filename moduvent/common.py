@@ -1,53 +1,15 @@
 import importlib
 import weakref
 from abc import ABC, abstractmethod
-from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Dict, List, Type
 
 from loguru import logger
 
 from .events import Event
+from .utils import check_function_type, FunctionTypes, is_class_and_subclass, is_instance_and_subclass, CALLBACK_TYPE, SUBSCRIPTION_STRATEGY, _get_subscription_strategy, _handle_invalid_subscriptions
 
 common_logger = logger.bind(source="moduvent_common")
-
-
-def is_class_and_subclass(obj):
-    return isinstance(obj, type) and issubclass(obj, Event)
-
-
-def is_instance_and_subclass(obj):
-    return is_class_and_subclass(type(obj))
-
-
-class FunctionTypes(Enum):
-    """
-    BOUND_METHOD: instance is the instance (BOUND_METHOD) or class (CLASSMETHOD)
-    UNBOUND_METHOD: instance isn't set yet since the class hasn't been initialized
-    FUNCTION/STATICMETHOD: instance is None
-    """
-
-    STATICMETHOD = auto()
-    BOUND_METHOD = auto()
-    UNBOUND_METHOD = auto()  # this occurs when a class method (both classmethod and instance method) is defined but the class is not initialized
-    FUNCTION = auto()
-    CALLBACK = auto()
-    UNKNOWN = auto()
-
-
-def check_function_type(func):
-    type_name = func.__class__.__name__
-    if type_name == "staticmethod":
-        return FunctionTypes.STATICMETHOD
-    elif type_name == "method":
-        return FunctionTypes.BOUND_METHOD
-    elif type_name == "function":
-        if hasattr(func, "_subscriptions"):
-            return FunctionTypes.UNBOUND_METHOD
-        else:
-            return FunctionTypes.FUNCTION
-    else:
-        return FunctionTypes.UNKNOWN
 
 
 class Checker:
@@ -205,9 +167,6 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
 
 
 class BaseEventManager(ABC):
-    class SUBSCRIPTION_STRATEGY(Enum):
-        EVENTS = auto()
-        CONDITIONS = auto()
 
     _subscriptions = None
     _callqueue = None
@@ -216,10 +175,6 @@ class BaseEventManager(ABC):
 
     registry_class = BaseCallbackRegistry
     processing_class = BaseCallbackProcessing
-
-    class CALLBACK_TYPE(Enum):
-        REGISTRY = auto()
-        PROCESSING = auto()
 
     def _get_callback_class(
         self, callback_type: CALLBACK_TYPE
@@ -402,23 +357,39 @@ class BaseEventManager(ABC):
         self._process_callqueue()
 
 
-def subscribe_method(*event_types: Type[Event]):
-    """Tag the method with subscription info."""
-    # Validate that all event_types are subclasses of Event
-    for event_type in event_types:
-        if not is_class_and_subclass(event_type):
-            raise TypeError(
-                f"subscribe_method decorator expects Event subclasses, got {event_type!r}."
-            )
+def subscribe_method(*args, **kwargs):
+    """subscribe dispatcher decorator.
+    The first argument must be an event type.
+    If the second argument is a function, then functions after that will be registered as conditions.
+    If the second argument is another event, then events after that will be registered as multi-callbacks.
+    If arguments after the second argument is not same, then it will raise a ValueError.
+    """
+    strategy = _get_subscription_strategy(*args, **kwargs)
+    if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-    def decorator(func):
-        if not hasattr(func, "_subscriptions"):
-            func._subscriptions = []  # note that function member does not support type hint
-        func._subscriptions.extend(event_types)
-        common_logger.debug(f"{func.__qualname__}._subscriptions = {event_types}")
-        return func
+        def decorator(func: Callable[[Event], None]):
+            if not hasattr(func, "_subscriptions"):
+                func._subscriptions = {}  # note that function member does not support type hint
+            for event_type in args:
+                func._subscriptions.setdefault(event_type, [])
+                common_logger.debug(f"{func.__qualname__}._subscriptions[{event_type}] is set.")
+            return func
 
-    return decorator
+        return decorator
+    elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
+        event_type = args[0]
+        conditions = args[1:]
+
+        def decorator(func: Callable[[Event], None]):
+            if not hasattr(func, "_subscriptions"):
+                func._subscriptions = {}  # note that function member does not support type hint
+            func._subscriptions.setdefault(event_type, []).extend(conditions)
+            common_logger.debug(f"{func.__qualname__}._subscriptions[{event_type}] = {conditions}")
+            return func
+
+        return decorator
+    else:
+        raise ValueError(f"Invalid subscription strategy {strategy}")
 
 
 class EventMeta(type):

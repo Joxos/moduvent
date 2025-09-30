@@ -119,7 +119,4 @@ class EventAwareBase(metaclass=EventMeta):
         moduvent_logger.debug(f"Registering callbacks of {self}...")
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
-                callback = CallbackRegistry(
-                    func=getattr(self, func.__name__), event=event_type
-                )
-                self.event_manager.register(callback)
+                self.event_manager.register(func=getattr(self, func.__name__), event_type=event_type)
