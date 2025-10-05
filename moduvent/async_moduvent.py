@@ -12,6 +12,7 @@ from .common import (
     EventMeta,
 )
 from .events import Event
+from .utils import CALLBACK_TYPE, SUBSCRIPTION_STRATEGY
 
 async_moduvent_logger = logger.bind(source="moduvent_async")
 
@@ -97,7 +98,7 @@ class AsyncEventManager(BaseEventManager):
 
     def subscribe(self, *args, **kwargs):
         strategy = self._get_subscription_strategy(*args, **kwargs)
-        if strategy == self.SUBSCRIPTION_STRATEGY.EVENTS:
+        if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
             def decorator(func: Callable[[Event], None]):
                 for event_type in args:
@@ -107,7 +108,7 @@ class AsyncEventManager(BaseEventManager):
                 return func
 
             return decorator
-        elif strategy == self.SUBSCRIPTION_STRATEGY.CONDITIONS:
+        elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
             event_type = args[0]
             conditions = args[1:]
 
@@ -151,7 +152,7 @@ class AsyncEventManager(BaseEventManager):
                 logger.debug(f"Adding {callback} to callqueue...")
                 await self._append_to_callqueue(
                     self._create(
-                        callback_type=self.CALLBACK_TYPE.PROCESSING,
+                        callback_type=CALLBACK_TYPE.PROCESSING,
                         callback=callback,
                         event=event,
                     )

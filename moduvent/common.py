@@ -7,7 +7,15 @@ from typing import Callable, Dict, List, Type
 from loguru import logger
 
 from .events import Event
-from .utils import check_function_type, FunctionTypes, is_class_and_subclass, is_instance_and_subclass, CALLBACK_TYPE, SUBSCRIPTION_STRATEGY, _get_subscription_strategy, _handle_invalid_subscriptions
+from .utils import (
+    CALLBACK_TYPE,
+    SUBSCRIPTION_STRATEGY,
+    FunctionTypes,
+    _get_subscription_strategy,
+    check_function_type,
+    is_class_and_subclass,
+    is_instance_and_subclass,
+)
 
 common_logger = logger.bind(source="moduvent_common")
 
@@ -146,6 +154,15 @@ class BaseCallbackRegistry(ABC):
         return f"Callback: {self.event} -> {func_string} ({instance_string}:{self.func_type})"
 
 
+class PostCallbackRegistry(BaseCallbackRegistry):
+    func: Callable[[Event], None] = None
+
+    def __eq__(self, value):
+        if isinstance(value, PostCallbackRegistry):
+            return super()._compare_attributes(value)
+        return super().__eq__(value)
+
+
 class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
     event: EventInstance = EventInstance()
 
@@ -167,7 +184,6 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
 
 
 class BaseEventManager(ABC):
-
     _subscriptions = None
     _callqueue = None
     _subscription_lock = None
@@ -179,9 +195,9 @@ class BaseEventManager(ABC):
     def _get_callback_class(
         self, callback_type: CALLBACK_TYPE
     ) -> Type[BaseCallbackRegistry]:
-        if callback_type == self.CALLBACK_TYPE.REGISTRY:
+        if callback_type == CALLBACK_TYPE.REGISTRY:
             return self.registry_class
-        elif callback_type == self.CALLBACK_TYPE.PROCESSING:
+        elif callback_type == CALLBACK_TYPE.PROCESSING:
             return self.processing_class
         else:
             raise ValueError(f"Invalid callback type: {callback_type}")
@@ -227,7 +243,7 @@ class BaseEventManager(ABC):
         """
         self._handle_invalid_subscriptions(*args, **kwargs)
         if len(args) == 1 and is_class_and_subclass(args[0]):
-            return self.SUBSCRIPTION_STRATEGY.EVENTS
+            return SUBSCRIPTION_STRATEGY.EVENTS
         all_events = is_class_and_subclass(args[1])
         for arg in args:
             if all_events and not is_class_and_subclass(arg):
@@ -239,9 +255,9 @@ class BaseEventManager(ABC):
                     f"Got {arg} among conditions (expect a callable judger function)"
                 )
         return (
-            self.SUBSCRIPTION_STRATEGY.EVENTS
+            SUBSCRIPTION_STRATEGY.EVENTS
             if all_events
-            else self.SUBSCRIPTION_STRATEGY.CONDITIONS
+            else SUBSCRIPTION_STRATEGY.CONDITIONS
         )
 
     def _remove_subscriptions(self, filter_func: Callable[[Type[Event], None], bool]):
@@ -303,7 +319,7 @@ class BaseEventManager(ABC):
     ):
         """Wrap this function with lock in subclass"""
         callback = self._create(
-            callback_type=self.CALLBACK_TYPE.REGISTRY,
+            callback_type=CALLBACK_TYPE.REGISTRY,
             func=func,
             event=event_type,
             conditions=conditions,
@@ -347,7 +363,7 @@ class BaseEventManager(ABC):
             for callback in callbacks:
                 self._append_to_callqueue(
                     self._create(
-                        callback_type=self.CALLBACK_TYPE.PROCESSING,
+                        callback_type=CALLBACK_TYPE.PROCESSING,
                         callback=callback,
                         event=event,
                     )
@@ -371,8 +387,12 @@ def subscribe_method(*args, **kwargs):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # note that function member does not support type hint
             for event_type in args:
-                func._subscriptions.setdefault(event_type, [])
-                common_logger.debug(f"{func.__qualname__}._subscriptions[{event_type}] is set.")
+                func._subscriptions.setdefault(event_type, []).append(
+                    PostCallbackRegistry(func=func, event=event_type)
+                )
+                common_logger.debug(
+                    f"{func.__qualname__}._subscriptions[{event_type}] is set."
+                )
             return func
 
         return decorator
@@ -383,8 +403,12 @@ def subscribe_method(*args, **kwargs):
         def decorator(func: Callable[[Event], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # note that function member does not support type hint
-            func._subscriptions.setdefault(event_type, []).extend(conditions)
-            common_logger.debug(f"{func.__qualname__}._subscriptions[{event_type}] = {conditions}")
+            func._subscriptions.setdefault(event_type, []).append(
+                PostCallbackRegistry(func=func, event=event_type, conditions=conditions)
+            )
+            common_logger.debug(
+                f"{func.__qualname__}._subscriptions[{event_type}] = {conditions}"
+            )
             return func
 
         return decorator
@@ -398,12 +422,14 @@ class EventMeta(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        _subscriptions: Dict[Type[Event], List[Callable[[Event], None]]] = {}
+        _subscriptions: Dict[Type[Event], List[PostCallbackRegistry]] = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if hasattr(attr_value, "_subscriptions"):
                 for event_type in attr_value._subscriptions:
-                    _subscriptions.setdefault(event_type, []).append(attr_value)
+                    _subscriptions.setdefault(event_type, []).extend(
+                        attr_value._subscriptions[event_type]
+                    )
 
         new_class._subscriptions = _subscriptions
         return new_class

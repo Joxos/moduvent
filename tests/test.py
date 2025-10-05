@@ -1,5 +1,3 @@
-from utils import CaptureOutput
-
 from moduvent import (
     Event,
     EventAwareBase,

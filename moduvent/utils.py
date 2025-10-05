@@ -1,6 +1,7 @@
-
 from enum import Enum, auto
+
 from .events import Event
+
 
 def is_class_and_subclass(obj):
     return isinstance(obj, type) and issubclass(obj, Event)
@@ -44,9 +45,11 @@ class SUBSCRIPTION_STRATEGY(Enum):
     EVENTS = auto()
     CONDITIONS = auto()
 
+
 class CALLBACK_TYPE(Enum):
     REGISTRY = auto()
     PROCESSING = auto()
+
 
 def _handle_invalid_subscriptions(*args, **kwargs):
     if not args:
@@ -54,6 +57,7 @@ def _handle_invalid_subscriptions(*args, **kwargs):
 
     if not is_class_and_subclass(args[0]):
         raise ValueError("First argument must be an event type")
+
 
 def _get_subscription_strategy(*args, **kwargs):
     """
@@ -68,15 +72,11 @@ def _get_subscription_strategy(*args, **kwargs):
     all_events = is_class_and_subclass(args[1])
     for arg in args:
         if all_events and not is_class_and_subclass(arg):
-            raise ValueError(
-                f"Got {arg} among events (expect a inheritor of Event)"
-            )
+            raise ValueError(f"Got {arg} among events (expect a inheritor of Event)")
         elif not all_events and not callable(arg):
             raise ValueError(
                 f"Got {arg} among conditions (expect a callable judger function)"
             )
     return (
-        SUBSCRIPTION_STRATEGY.EVENTS
-        if all_events
-        else SUBSCRIPTION_STRATEGY.CONDITIONS
+        SUBSCRIPTION_STRATEGY.EVENTS if all_events else SUBSCRIPTION_STRATEGY.CONDITIONS
     )

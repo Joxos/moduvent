@@ -11,6 +11,7 @@ from .common import (
     EventMeta,
 )
 from .events import Event
+from .utils import SUBSCRIPTION_STRATEGY
 
 moduvent_logger = logger.bind(source="moduvent_sync")
 
@@ -18,7 +19,7 @@ moduvent_logger = logger.bind(source="moduvent_sync")
 class CallbackRegistry(BaseCallbackRegistry):
     def __eq__(self, value):
         if isinstance(value, CallbackRegistry):
-            return self._compare_attributes(value)
+            return super()._compare_attributes(value)
         return super().__eq__(value)
 
 
@@ -86,7 +87,7 @@ class EventManager(BaseEventManager):
         If arguments after the second argument is not same, then it will raise a ValueError.
         """
         strategy = self._get_subscription_strategy(*args, **kwargs)
-        if strategy == self.SUBSCRIPTION_STRATEGY.EVENTS:
+        if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
             def decorator(func: Callable[[Event], None]):
                 for event_type in args:
@@ -94,7 +95,7 @@ class EventManager(BaseEventManager):
                 return func
 
             return decorator
-        elif strategy == self.SUBSCRIPTION_STRATEGY.CONDITIONS:
+        elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
             event_type = args[0]
             conditions = args[1:]
 
@@ -117,6 +118,10 @@ class EventAwareBase(metaclass=EventMeta):
 
     def _register(self):
         moduvent_logger.debug(f"Registering callbacks of {self}...")
-        for event_type, funcs in self._subscriptions.items():
-            for func in funcs:
-                self.event_manager.register(func=getattr(self, func.__name__), event_type=event_type)
+        for event_type, callbacks in self._subscriptions.items():
+            for callback in callbacks:
+                self.event_manager.register(
+                    getattr(self, callback.func.__name__),
+                    event_type,
+                    *callback.conditions,
+                )
