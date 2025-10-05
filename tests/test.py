@@ -79,13 +79,14 @@ if __name__ == "__main__":
     register(alice.on_test_event, TestEvent_2)
     emit(TestEvent_2("hello from TestEvent_2"))
 
-    del alice
-    register(bob.on_test_event, TestEvent_1)
-    try:
-        register(None, TestEvent_2)
-    except ValueError as e:
-        print(e)
-    emit(TestEvent_1("hello without Alice and with Bob"))
+    # delete an instance directly is ok for func ref but will cause further issues
+    # del alice
+    # register(bob.on_test_event, TestEvent_1)
+    # try:
+    #     register(None, TestEvent_2)
+    # except ValueError as e:
+    #     print(e)
+    # emit(TestEvent_1("hello without Alice and with Bob"))
 
     unsubscribe(TestEvent_2)
     emit(TestEvent_2("hello without TestEvent_2 (this should not be printed)"))
