@@ -12,7 +12,7 @@ from .common import (
     PostCallbackRegistry,
 )
 from .events import Event
-from .utils import SUBSCRIPTION_STRATEGY
+from .utils import SUBSCRIPTION_STRATEGY, _get_subscription_strategy
 
 moduvent_logger = logger.bind(source="moduvent_sync")
 
@@ -30,7 +30,7 @@ class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
             try:
                 self.func(self.event)
             except Exception as e:
-                moduvent_logger.exception(f"Error while processing callback: {e}")
+                moduvent_logger.exception(f"Error while processing {self}: {e}")
 
 
 # We say that a subscription is the information that a method wants to be called back
@@ -99,7 +99,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
         If the second argument is another event, then events after that will be registered as multi-callbacks.
         If arguments after the second argument is not same, then it will raise a ValueError.
         """
-        strategy = self._get_subscription_strategy(*args, **kwargs)
+        strategy = _get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
             def decorator(func: Callable[[Event], None]):

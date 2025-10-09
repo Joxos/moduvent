@@ -46,14 +46,6 @@ class SUBSCRIPTION_STRATEGY(Enum):
     CONDITIONS = auto()
 
 
-def _handle_invalid_subscriptions(*args, **kwargs):
-    if not args:
-        raise ValueError("At least one event type must be provided")
-
-    if not is_class_and_subclass(args[0]):
-        raise ValueError("First argument must be an event type")
-
-
 def _get_subscription_strategy(*args, **kwargs):
     """
     The first argument must be an event type.
@@ -61,17 +53,26 @@ def _get_subscription_strategy(*args, **kwargs):
     If the second argument is another event, then events after that will be registered as multi-callbacks.
     If arguments after the second argument is not same, then it will raise a ValueError.
     """
-    _handle_invalid_subscriptions(*args, **kwargs)
+    # handle invalid subscriptions
+    if not args:
+        raise ValueError("At least one event type must be provided")
+    if not is_class_and_subclass(args[0]):
+        raise ValueError("First argument must be an event type")
+
     if len(args) == 1 and is_class_and_subclass(args[0]):
         return SUBSCRIPTION_STRATEGY.EVENTS
-    all_events = is_class_and_subclass(args[1])
+    all_events = is_class_and_subclass(args[1])  # pyright: ignore[reportGeneralTypeIssues] (surpress because of the check above)
     for arg in args:
         if all_events and not is_class_and_subclass(arg):
-            raise ValueError(f"Got {arg} among events (expect a inheritor of Event)")
+            raise ValueError(
+                f"Got {arg} among events (expect an inheritor of Event)"
+            )
         elif not all_events and not callable(arg):
             raise ValueError(
-                f"Got {arg} among conditions (expect a callable judger function)"
+                f"Got {arg} among conditions (expect a callable function to be the condition)"
             )
     return (
-        SUBSCRIPTION_STRATEGY.EVENTS if all_events else SUBSCRIPTION_STRATEGY.CONDITIONS
+        SUBSCRIPTION_STRATEGY.EVENTS
+        if all_events
+        else SUBSCRIPTION_STRATEGY.CONDITIONS
     )
