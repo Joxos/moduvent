@@ -1,5 +1,6 @@
 import weakref
-from typing import Any, Callable, Type
+from collections.abc import Callable
+from typing import Any, Type
 
 from .utils import (
     FunctionTypes,

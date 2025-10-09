@@ -1,7 +1,8 @@
 import asyncio
 from abc import abstractmethod
+from collections.abc import Callable
 from threading import RLock
-from typing import Callable, Dict, List, Type
+from typing import Awaitable, Concatenate, Dict, Generic, List, ParamSpec, Tuple, Type
 
 from loguru import logger
 
@@ -12,20 +13,35 @@ from .common import (
     EventMeta,
     PostCallbackRegistry,
 )
-from .events import Event
-from .utils import SUBSCRIPTION_STRATEGY, _get_subscription_strategy
+from .events import E
+from .utils import SUBSCRIPTION_STRATEGY, get_subscription_strategy
 
 async_moduvent_logger = logger.bind(source="moduvent_async")
 
 
-class AsyncCallbackRegistry(BaseCallbackRegistry):
+class AsyncPostCallbackRegistry(PostCallbackRegistry[E]):
+    def __init__(
+        self,
+        func: Callable[[E], Awaitable],
+        event_type: Type[E],
+        conditions: Tuple[Callable[[E], bool], ...] = (),
+    ) -> None:
+        super().__init__(func, event_type, conditions)
+
+    def __eq__(self, value):
+        if isinstance(value, AsyncPostCallbackRegistry):
+            return self._compare_attributes(value)
+        return super().__eq__(value)
+
+
+class AsyncCallbackRegistry(BaseCallbackRegistry[E]):
     def __eq__(self, value):
         if isinstance(value, AsyncCallbackRegistry):
             return self._compare_attributes(value)
         return super().__eq__(value)
 
 
-class AsyncCallbackProcessing(BaseCallbackProcessing, AsyncCallbackRegistry):
+class AsyncCallbackProcessing(BaseCallbackProcessing[E], AsyncCallbackRegistry):
     async def call(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         if super().callable():
             try:
@@ -37,11 +53,11 @@ class AsyncCallbackProcessing(BaseCallbackProcessing, AsyncCallbackRegistry):
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
 class AsyncEventManager(
-    BaseEventManager[AsyncCallbackRegistry, AsyncCallbackProcessing]
+    BaseEventManager[AsyncCallbackRegistry, AsyncCallbackProcessing, E]
 ):
     def __init__(self):
-        self._subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]] = {}
-        self._post_subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]] = {}
+        self._subscriptions: Dict[Type[E], List[AsyncCallbackRegistry]] = {}
+        self._post_subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
         self._callqueue: asyncio.Queue[AsyncCallbackProcessing] = asyncio.Queue()
         self._subscription_lock = asyncio.Lock()
         self._post_subscription_lock = RLock()
@@ -57,7 +73,7 @@ class AsyncEventManager(
         return AsyncCallbackProcessing
 
     async def _set_subscriptions(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        self, subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]]
+        self, subscriptions: Dict[Type[E], List[AsyncCallbackRegistry]]
     ):
         async with self._subscription_lock:
             return super()._set_subscriptions(subscriptions)
@@ -98,9 +114,9 @@ class AsyncEventManager(
 
     async def register(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         self,
-        func: Callable[[Event], None],
-        event_type: Type[Event],
-        *conditions: Callable[[Event], bool],
+        func: Callable[[E], None],
+        event_type: Type[E],
+        *conditions: Callable[[E], bool],
     ):
         async with self._subscription_lock:
             super().register(func, event_type, *conditions)
@@ -119,34 +135,35 @@ class AsyncEventManager(
         self._post_subscriptions.clear()
 
     def subscribe(self, *args, **kwargs):
-        strategy = _get_subscription_strategy(*args, **kwargs)
+        strategy = get_subscription_strategy(*args, **kwargs)
+        P = ParamSpec("P")
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-            def decorator(func: Callable[[Event], None]):
+            def events_decorator(func: Callable[Concatenate[E, P], Awaitable]):
                 for event_type in args:
                     self._post_subscriptions.setdefault(event_type, []).append(
-                        AsyncCallbackRegistry(func=func, event_type=event_type)
+                        PostCallbackRegistry(func=func, event_type=event_type)
                     )
                 return func
 
-            return decorator
+            return events_decorator
         elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
             event_type = args[0]
             conditions = args[1:]
 
-            def decorator(func: Callable[[Event], None]):
+            def conditions_decorator(func: Callable[Concatenate[E, P], Awaitable]):
                 self._post_subscriptions.setdefault(event_type, []).append(
-                    AsyncCallbackRegistry(
+                    PostCallbackRegistry(
                         func=func, event_type=event_type, conditions=conditions
                     )
                 )
                 return func
 
-            return decorator
+            return conditions_decorator
         else:
             raise ValueError(f"Invalid subscription strategy: {strategy}")
 
-    async def emit(self, event: Event):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
+    async def emit(self, event: E):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         valid, event_type = self._emit_check(event)
         if not valid:
             return
@@ -170,11 +187,11 @@ class AsyncEventManager(
         await self._process_callqueue()
 
 
-class AsyncEventAwareBase(metaclass=EventMeta):
+class AsyncEventAwareBase(Generic[E], metaclass=EventMeta):
     """The base class that utilize the metaclass."""
 
     event_manager: AsyncEventManager
-    _subscriptions: Dict[Type[Event], List[PostCallbackRegistry]] = {}
+    _subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
 
     def __init__(self, event_manager=None):
         if event_manager:

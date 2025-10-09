@@ -46,7 +46,7 @@ class SUBSCRIPTION_STRATEGY(Enum):
     CONDITIONS = auto()
 
 
-def _get_subscription_strategy(*args, **kwargs):
+def get_subscription_strategy(*args, **kwargs):
     """
     The first argument must be an event type.
     If the second argument is a function, then functions after that will be registered as conditions.

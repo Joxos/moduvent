@@ -1,9 +1,4 @@
-import asyncio
-import sys
-import tracemalloc
-
 import pytest
-from loguru import logger
 
 from moduvent import (
     DataEvent,
@@ -226,14 +221,3 @@ def test_call_receivers_in_order_of_registration(capsys):
         "Caught signal from 'order' (receiver1)",
         "Caught signal from 'order' (receiver2)",
     ]
-
-
-async def main():
-    logger.remove()
-    logger.add(sys.stderr, level="DEBUG")
-    tracemalloc.start()
-    await test_async_receivers()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

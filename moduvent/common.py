@@ -1,6 +1,6 @@
 import importlib
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import (
     Concatenate,
@@ -18,12 +18,12 @@ from typing import (
 from loguru import logger
 
 from .descriptors import EventInheritor, EventInstance, WeakReference
-from .events import Event
+from .events import E, Event
 from .utils import (
     SUBSCRIPTION_STRATEGY,
     FunctionTypes,
-    _get_subscription_strategy,
     check_function_type,
+    get_subscription_strategy,
     is_class_and_subclass,
     is_instance_and_subclass,
 )
@@ -31,15 +31,15 @@ from .utils import (
 common_logger = logger.bind(source="moduvent_common")
 
 
-class BaseCallbackRegistry(ABC):
+class BaseCallbackRegistry(ABC, Generic[E]):
     func: WeakReference = WeakReference()
     event_type: EventInheritor = EventInheritor()
 
     def __init__(
         self,
-        func: Callable[[Event], None],
-        event_type: Type[Event],
-        conditions: Tuple[Callable[[Event], bool], ...] = (),
+        func: Callable[[E], None | Awaitable],
+        event_type: Type[E],
+        conditions: Tuple[Callable[[E], bool], ...] = (),
     ) -> None:
         self.func_type = (
             FunctionTypes.UNKNOWN
@@ -99,8 +99,24 @@ class BaseCallbackRegistry(ABC):
         return f"Callback: {self.event_type} -> {func_string} ({instance_string}:{self.func_type})"
 
 
-class PostCallbackRegistry(BaseCallbackRegistry):
+class PostCallbackRegistry(BaseCallbackRegistry[E], Generic[E]):
     func: WeakReference = WeakReference()
+    event_type: EventInheritor = EventInheritor()
+
+    def __init__(
+        self,
+        func: Callable[[E], None | Awaitable],
+        event_type: Type[E],
+        conditions: Tuple[Callable[[E], bool], ...] = (),
+    ) -> None:
+        self.func_type = (
+            FunctionTypes.UNKNOWN
+        )  # we first set func_type since the setter of self.func may use it
+        self.func: WeakReference = func
+        self.event_type: EventInheritor = event_type
+        self.conditions = conditions or ()
+
+        self.func_type = check_function_type(func)
 
     def __eq__(self, value):
         if isinstance(value, PostCallbackRegistry):
@@ -108,14 +124,14 @@ class PostCallbackRegistry(BaseCallbackRegistry):
         return super().__eq__(value)
 
 
-class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
+class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
     func: WeakReference = WeakReference()
     event: EventInstance = EventInstance()
 
     def __init__(
         self,
-        func: Callable[[Event], None],
-        event: Event,
+        func: Callable[[E], None],
+        event: E,
         conditions: Tuple[Callable[[Event], bool], ...] | None = None,
     ):
         self.func_type = (
@@ -150,8 +166,8 @@ BCR = TypeVar("BCR", bound=BaseCallbackRegistry)
 BCP = TypeVar("BCP", bound=BaseCallbackProcessing)
 
 
-class BaseEventManager(ABC, Generic[BCR, BCP]):
-    _subscriptions: Dict[Type[Event], List[BCR]] = {}
+class BaseEventManager(ABC, Generic[BCR, BCP, E]):
+    _subscriptions: Dict[Type[E], List[BCR]] = {}
     _callqueue = None
     _subscription_lock = None
     _callqueue_lock = None
@@ -170,7 +186,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
         ...
 
     @abstractmethod
-    def _set_subscriptions(self, subscriptions: Dict[Type[Event], List[BCR]]):
+    def _set_subscriptions(self, subscriptions: Dict[Type[E], List[BCR]]):
         """Wrap this function with lock in subclass"""
         self._subscriptions = subscriptions
 
@@ -185,7 +201,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
     @abstractmethod
     def reset(self): ...
 
-    def _remove_subscriptions(self, filter_func: Callable[[Type[Event], BCR], bool]):
+    def _remove_subscriptions(self, filter_func: Callable[[Type[E], BCR], bool]):
         new_subscriptions = {}
         for event_type, callbacks in list(self._subscriptions.items()):
             for cb in callbacks:
@@ -197,7 +213,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
         self._set_subscriptions(new_subscriptions)
 
     def _unsubscribe_check_args(
-        self, func: Callable[[Event], None] | None, event_type: Type[Event] | None
+        self, func: Callable[[E], None] | None, event_type: Type[E] | None
     ):
         if not func and not event_type:
             raise ValueError(
@@ -209,7 +225,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
             )
 
     def _unsubscribe_process_logic(
-        self, func: Callable[[Event], None] | None, event_type: Type[Event] | None
+        self, func: Callable[[E], None] | None, event_type: Type[E] | None
     ):
         if func and event_type:
             if event_type not in self._subscriptions:
@@ -232,9 +248,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
     @abstractmethod
     def register(
         self,
-        func: Callable[[Event], None],
-        event_type: Type[Event],
-        *conditions: Callable[[Event], bool],
+        func: Callable[[E], None],
+        event_type: Type[E],
+        *conditions: Callable[[E], bool],
     ):
         """Wrap this function with lock in subclass"""
         callback: BCR = self.registry_class(
@@ -254,13 +270,13 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
 
     def unsubscribe(
         self,
-        func: Callable[[Event], None] | None = None,
-        event_type: Type[Event] | None = None,
+        func: Callable[[E], None] | None = None,
+        event_type: Type[E] | None = None,
     ):
         self._unsubscribe_check_args(func, event_type)
         self._unsubscribe_process_logic(func, event_type)
 
-    def _emit_check(self, event: Event):
+    def _emit_check(self, event: E):
         if not is_instance_and_subclass(event):
             common_logger.warning(f"Skipping non-instance event: {event}")
             return False, event
@@ -270,7 +286,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
             return False, event_type
         return True, event_type
 
-    def emit(self, event: Event):
+    def emit(self, event: E):
         valid, event_type = self._emit_check(event)
         if not valid:
             return
@@ -299,11 +315,11 @@ def subscribe_method(*args, **kwargs):
     If the second argument is another event, then events after that will be registered as multi-callbacks.
     If arguments after the second argument is not same, then it will raise a ValueError.
     """
-    strategy = _get_subscription_strategy(*args, **kwargs)
+    strategy = get_subscription_strategy(*args, **kwargs)
     P = ParamSpec("P")
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[Concatenate[Event, P], None]):
+        def events_decorator(func: Callable[Concatenate[E, P], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -320,7 +336,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[Concatenate[Event, P], None]):
+        def conditions_decorator(func: Callable[Concatenate[E, P], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
@@ -344,7 +360,7 @@ class EventMeta(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        _subscriptions: Dict[Type[Event], List[PostCallbackRegistry]] = {}
+        _subscriptions = {}
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if hasattr(attr_value, "_subscriptions"):

@@ -1,6 +1,7 @@
 from collections import deque
+from collections.abc import Callable
 from threading import RLock
-from typing import Callable, Deque, Dict, List, Type
+from typing import Deque, Dict, Generic, List, Type
 
 from loguru import logger
 
@@ -11,20 +12,20 @@ from .common import (
     EventMeta,
     PostCallbackRegistry,
 )
-from .events import Event
-from .utils import SUBSCRIPTION_STRATEGY, _get_subscription_strategy
+from .events import E
+from .utils import SUBSCRIPTION_STRATEGY, get_subscription_strategy
 
 moduvent_logger = logger.bind(source="moduvent_sync")
 
 
-class CallbackRegistry(BaseCallbackRegistry):
+class CallbackRegistry(BaseCallbackRegistry[E]):
     def __eq__(self, value):
         if isinstance(value, CallbackRegistry):
             return super()._compare_attributes(value)
         return super().__eq__(value)
 
 
-class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
+class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
     def call(self) -> None:
         if super().callable():
             try:
@@ -35,9 +36,9 @@ class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
+class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
     def __init__(self):
-        self._subscriptions: Dict[Type[Event], List[CallbackRegistry]] = {}
+        self._subscriptions: Dict[Type[E], List[CallbackRegistry]] = {}
         self._callqueue: Deque[CallbackProcessing] = deque()
         self._subscription_lock = RLock()
         self._callqueue_lock = RLock()
@@ -50,9 +51,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
     def processing_class(cls) -> Type[CallbackProcessing]:
         return CallbackProcessing
 
-    def _set_subscriptions(
-        self, subscriptions: Dict[Type[Event], List[CallbackRegistry]]
-    ):
+    def _set_subscriptions(self, subscriptions: Dict[Type[E], List[CallbackRegistry]]):
         with self._subscription_lock:
             return super()._set_subscriptions(subscriptions)
 
@@ -85,9 +84,9 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
 
     def register(
         self,
-        func: Callable[[Event], None],
-        event_type: Type[Event],
-        *conditions: Callable[[Event], bool],
+        func: Callable[[E], None],
+        event_type: Type[E],
+        *conditions: Callable[[E], bool],
     ):
         with self._subscription_lock:
             super().register(func, event_type, *conditions)
@@ -99,10 +98,10 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
         If the second argument is another event, then events after that will be registered as multi-callbacks.
         If arguments after the second argument is not same, then it will raise a ValueError.
         """
-        strategy = _get_subscription_strategy(*args, **kwargs)
+        strategy = get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-            def decorator(func: Callable[[Event], None]):
+            def decorator(func: Callable[[E], None]):
                 for event_type in args:
                     self.register(func=func, event_type=event_type)
                 return func
@@ -112,7 +111,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
             event_type = args[0]
             conditions = args[1:]
 
-            def decorator(func: Callable[[Event], None]):
+            def decorator(func: Callable[[E], None]):
                 self.register(func, event_type, *conditions)
                 return func
 
@@ -121,11 +120,11 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
             raise ValueError(f"Invalid subscription strategy {strategy}")
 
 
-class EventAwareBase(metaclass=EventMeta):
+class EventAwareBase(Generic[E], metaclass=EventMeta):
     """The base class that utilize the metaclass."""
 
     event_manager: EventManager
-    _subscriptions: Dict[Type[Event], List[PostCallbackRegistry]] = {}
+    _subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
 
     def __init__(self, event_manager=None):
         if event_manager:

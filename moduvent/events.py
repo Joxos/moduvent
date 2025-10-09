@@ -19,6 +19,9 @@ class Event:
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
+E = TypeVar("E", bound=Event)
+
+
 class MutedContext:
     """A context manager to temporarily mute events"""
 
