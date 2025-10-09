@@ -57,6 +57,10 @@ class EventManager(BaseEventManager):
     def _get_callqueue_length(self):
         return len(self._callqueue)
 
+    def reset(self):
+        with self._subscription_lock:
+            return super().reset()
+
     def _process_callqueue(self):
         moduvent_logger.debug("Processing callqueue...")
         with self._callqueue_lock:
@@ -110,9 +114,11 @@ class EventManager(BaseEventManager):
 
 class EventAwareBase(metaclass=EventMeta):
     """The base class that utilize the metaclass."""
+    event_manager: EventManager = None
 
-    def __init__(self, event_manager):
-        self.event_manager: EventManager = event_manager
+    def __init__(self, event_manager=None):
+        if event_manager:
+            self.event_manager: EventManager = event_manager
         # trigger registrations
         self._register()
 

@@ -56,6 +56,10 @@ class AsyncEventManager(BaseEventManager):
     def _get_callqueue_length(self) -> int:
         return self._callqueue.qsize()
 
+    async def reset(self):
+        async with self._subscription_lock:
+            super().reset()
+
     async def _process_callqueue(self):
         async_moduvent_logger.debug("Processing callqueue...")
         # The asyncio.Queue is naturally corotine-safe
@@ -164,8 +168,11 @@ class AsyncEventManager(BaseEventManager):
 class AsyncEventAwareBase(metaclass=EventMeta):
     """The base class that utilize the metaclass."""
 
-    def __init__(self, event_manager):
-        self.event_manager: AsyncEventManager = event_manager
+    event_manager: BaseEventManager = None
+
+    def __init__(self, event_manager=None):
+        if event_manager:
+            self.event_manager: AsyncEventManager = event_manager
 
     @classmethod
     @abstractmethod
