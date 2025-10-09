@@ -64,15 +64,11 @@ def _get_subscription_strategy(*args, **kwargs):
     all_events = is_class_and_subclass(args[1])  # pyright: ignore[reportGeneralTypeIssues] (surpress because of the check above)
     for arg in args:
         if all_events and not is_class_and_subclass(arg):
-            raise ValueError(
-                f"Got {arg} among events (expect an inheritor of Event)"
-            )
+            raise ValueError(f"Got {arg} among events (expect an inheritor of Event)")
         elif not all_events and not callable(arg):
             raise ValueError(
                 f"Got {arg} among conditions (expect a callable function to be the condition)"
             )
     return (
-        SUBSCRIPTION_STRATEGY.EVENTS
-        if all_events
-        else SUBSCRIPTION_STRATEGY.CONDITIONS
+        SUBSCRIPTION_STRATEGY.EVENTS if all_events else SUBSCRIPTION_STRATEGY.CONDITIONS
     )

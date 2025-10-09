@@ -36,7 +36,9 @@ class AsyncCallbackProcessing(BaseCallbackProcessing, AsyncCallbackRegistry):
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class AsyncEventManager(BaseEventManager[AsyncCallbackRegistry, AsyncCallbackProcessing]):
+class AsyncEventManager(
+    BaseEventManager[AsyncCallbackRegistry, AsyncCallbackProcessing]
+):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]] = {}
         self._post_subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]] = {}

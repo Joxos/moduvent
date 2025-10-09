@@ -2,7 +2,18 @@ import importlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar, ParamSpec, Concatenate
+from typing import (
+    Concatenate,
+    Dict,
+    Generic,
+    List,
+    Literal,
+    NoReturn,
+    ParamSpec,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 from loguru import logger
 
@@ -174,10 +185,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
     @abstractmethod
     def reset(self): ...
 
-
-    def _remove_subscriptions(
-        self, filter_func: Callable[[Type[Event], BCR], bool]
-    ):
+    def _remove_subscriptions(self, filter_func: Callable[[Type[Event], BCR], bool]):
         new_subscriptions = {}
         for event_type, callbacks in list(self._subscriptions.items()):
             for cb in callbacks:

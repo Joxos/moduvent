@@ -1,6 +1,6 @@
 from collections import deque
 from threading import RLock
-from typing import Callable, Deque, Dict, List, Type, Tuple
+from typing import Callable, Deque, Dict, List, Type
 
 from loguru import logger
 
