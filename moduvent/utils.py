@@ -46,11 +46,6 @@ class SUBSCRIPTION_STRATEGY(Enum):
     CONDITIONS = auto()
 
 
-class CALLBACK_TYPE(Enum):
-    REGISTRY = auto()
-    PROCESSING = auto()
-
-
 def _handle_invalid_subscriptions(*args, **kwargs):
     if not args:
         raise ValueError("At least one event type must be provided")

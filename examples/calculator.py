@@ -1,16 +1,19 @@
+import random
+
 from loguru import logger
+
 from moduvent import (
     Event,
     EventAwareBase,
     EventFactory,
     data_event,
     emit,
-    subscribe_method,
     subscribe,
+    subscribe_method,
 )
-import random
 
 logger.remove()
+
 
 class BinaryCalculation(Event):
     def __init__(self, id: int, a: float, b: float):
@@ -53,17 +56,25 @@ class Calculator(EventAwareBase):
 
     @subscribe_method(Exponentiation)
     def exponentiate(self, event: BinaryCalculation):
-        emit(ResultBroadcast(data=event.a ** event.b, sender=f"{event.a} ** {event.b}"))
+        emit(ResultBroadcast(data=event.a**event.b, sender=f"{event.a} ** {event.b}"))
+
 
 @subscribe(ResultBroadcast)
 def show_result(event: ResultBroadcast):
     print(f"{event.sender} = {event.data}")
 
+
 if __name__ == "__main__":
     # calculator_num = 5
     # calculators = [Calculator(f"Calculator {i}") for i in range(calculator_num)]
     calculator = Calculator("Calculator")
-    calculation_types = [Addition, Subtraction, Multiplication, Division, Exponentiation]
+    calculation_types = [
+        Addition,
+        Subtraction,
+        Multiplication,
+        Division,
+        Exponentiation,
+    ]
     generate_times = 20
 
     for i in range(generate_times):

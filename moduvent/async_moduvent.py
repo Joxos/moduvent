@@ -12,7 +12,7 @@ from .common import (
     EventMeta,
 )
 from .events import Event
-from .utils import CALLBACK_TYPE, SUBSCRIPTION_STRATEGY
+from .utils import SUBSCRIPTION_STRATEGY
 
 async_moduvent_logger = logger.bind(source="moduvent_async")
 
@@ -40,9 +40,15 @@ class AsyncEventManager(BaseEventManager):
         self._subscription_lock = asyncio.Lock()
         self._post_subscription_lock = RLock()
 
-        self.registry_class = AsyncCallbackRegistry
-        self.processing_class = AsyncCallbackProcessing
         self.worker_count = 10
+
+    @property
+    def registry_class(cls) -> Type[AsyncCallbackRegistry]:
+        return AsyncCallbackRegistry
+
+    @property
+    def processing_class(cls) -> Type[AsyncCallbackProcessing]:
+        return AsyncCallbackProcessing
 
     async def _set_subscriptions(
         self, subscriptions: Dict[Type[Event], List[AsyncCallbackRegistry]]
@@ -58,9 +64,15 @@ class AsyncEventManager(BaseEventManager):
 
     async def reset(self):
         async with self._subscription_lock:
-            super().reset()
+            self._subscriptions.clear()
 
     async def _process_callqueue(self):
+        # note that asyncio.Queue is not iterable
+        async_moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
+        # for i in range(self._get_callqueue_length()):
+        #     callback = self._callqueue.get_nowait()
+        #     async_moduvent_logger.debug(f"\t{callable}")
+        #     self._callqueue.put_nowait(callback)
         async_moduvent_logger.debug("Processing callqueue...")
         # The asyncio.Queue is naturally corotine-safe
         async with asyncio.TaskGroup() as group:
@@ -133,14 +145,6 @@ class AsyncEventManager(BaseEventManager):
     ):
         super().unsubscribe(func=func, event_type=event_type)
 
-    def _verbose_callqueue(self):
-        # note that asyncio.Queue is not iterable
-        async_moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
-        # for i in range(self._get_callqueue_length()):
-        #     callback = self._callqueue.get_nowait()
-        #     async_moduvent_logger.debug(f"\t{callable}")
-        #     self._callqueue.put_nowait(callback)
-
     async def emit(self, event: Event):
         valid, event_type = self._emit_check(event)
         if not valid:
@@ -155,14 +159,13 @@ class AsyncEventManager(BaseEventManager):
             for callback in callbacks:
                 logger.debug(f"Adding {callback} to callqueue...")
                 await self._append_to_callqueue(
-                    self._create(
-                        callback_type=CALLBACK_TYPE.PROCESSING,
+                    self.processing_class(
                         func=callback.func,
                         event=event,
                         conditions=callback.conditions,
                     )
                 )
-        self._verbose_callqueue()
+
         await self._process_callqueue()
 
 

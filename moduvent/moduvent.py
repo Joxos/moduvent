@@ -24,8 +24,8 @@ class CallbackRegistry(BaseCallbackRegistry):
 
 
 class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
-    def call(self):
-        if super().call():
+    def call(self) -> None:
+        if super().callable():
             try:
                 self.func(self.event)
             except Exception as e:
@@ -34,15 +34,20 @@ class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
 
 # We say that a subscription is the information that a method wants to be called back
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
-class EventManager(BaseEventManager):
+class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[CallbackRegistry]] = {}
         self._callqueue: Deque[CallbackRegistry] = deque()
         self._subscription_lock = RLock()
         self._callqueue_lock = RLock()
 
-        self.registry_class = CallbackRegistry
-        self.processing_class = CallbackProcessing
+    @property
+    def registry_class(cls) -> Type[CallbackRegistry]:
+        return CallbackRegistry
+
+    @property
+    def processing_class(cls) -> Type[CallbackProcessing]:
+        return CallbackProcessing
 
     def _set_subscriptions(
         self, subscriptions: Dict[Type[Event], List[CallbackRegistry]]
@@ -52,16 +57,19 @@ class EventManager(BaseEventManager):
 
     def _append_to_callqueue(self, callback):
         with self._callqueue_lock:
-            super()._append_to_callqueue(callback)
+            self._callqueue.append(callback)
 
     def _get_callqueue_length(self):
         return len(self._callqueue)
 
     def reset(self):
         with self._subscription_lock:
-            return super().reset()
+            self._subscriptions.clear()
 
     def _process_callqueue(self):
+        moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
+        for callback in self._callqueue:
+            moduvent_logger.debug(f"\t{callback}")
         moduvent_logger.debug("Processing callqueue...")
         with self._callqueue_lock:
             while self._callqueue:

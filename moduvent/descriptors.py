@@ -1,7 +1,6 @@
 import weakref
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
-from .events import Event
 from .utils import (
     FunctionTypes,
     check_function_type,
@@ -11,16 +10,18 @@ from .utils import (
 
 
 class Checker:
-    conditions: list[Callable[[Event], bool]] = []
-    error_message = "{value} with {value_type} type is invalid for {name} attribute"
-    error_type = TypeError
+    conditions: list[Callable[..., bool]] = []
+    error_message: str = (
+        "{value} with {value_type} type is invalid for {name} attribute"
+    )
+    error_type: Type[Exception] = TypeError
 
     def __set_name__(self, owner, name):
         self.public_name = name
         self.private_name = f"_{name}"
         setattr(owner, self.private_name, None)
 
-    def __set__(self, obj: object, value: Type[Event] | None):
+    def __set__(self, obj: object, value: Any):
         for condition in self.conditions:
             if not condition(value):
                 raise self.error_type(
@@ -49,7 +50,7 @@ class EventInstance(Checker):
 
 
 class WeakReference:
-    def __set__(self, obj, value):
+    def __set__(self, obj, value) -> None:
         if obj is not None:
             if value is None:
                 obj._func_ref = None
@@ -64,6 +65,6 @@ class WeakReference:
                         f"Cannot set weak reference of {value} to {obj}"
                     ) from e
 
-    def __get__(self, obj, objtype=None):
+    def __get__(self, obj, objtype=None) -> Any:
         ref = obj._func_ref
         return None if ref is None else ref()

@@ -1,5 +1,5 @@
-from typing import Type, TypeVar, Any
 from types import new_class
+from typing import Any, Type, TypeVar
 from uuid import uuid4 as uuid
 
 
@@ -18,6 +18,7 @@ class Event:
         attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
+
 class MutedContext:
     """A context manager to temporarily mute events"""
 
@@ -30,7 +31,9 @@ class MutedContext:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.event.enabled = True
 
+
 E = TypeVar("E", bound=Event)
+
 
 class EventFactory(dict[str, Type[E]]):
     """A factory to create new event classes inheriting from given base class but with customized name."""
