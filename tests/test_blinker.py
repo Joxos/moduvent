@@ -30,7 +30,6 @@ def test_decoupling_with_named_signals():
 
 
 def test_subscribing_to_signals(capsys):
-
     def subscriber(signal: Signal):
         print(f"Got a signal sent by {signal.sender!r}")
 

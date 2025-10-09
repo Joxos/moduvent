@@ -1,7 +1,14 @@
 import weakref
 from typing import Callable, Type
+
 from .events import Event
-from .utils import check_function_type, FunctionTypes, is_class_and_subclass, is_instance_and_subclass
+from .utils import (
+    FunctionTypes,
+    check_function_type,
+    is_class_and_subclass,
+    is_instance_and_subclass,
+)
+
 
 class Checker:
     conditions: list[Callable[[Event], bool]] = []

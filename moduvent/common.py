@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Type
 
 from loguru import logger
 
+from .descriptors import EventInheritor, EventInstance, WeakReference
 from .events import Event
 from .utils import (
     CALLBACK_TYPE,
@@ -16,10 +17,8 @@ from .utils import (
     is_class_and_subclass,
     is_instance_and_subclass,
 )
-from .descriptors import WeakReference, EventInheritor, EventInstance
 
 common_logger = logger.bind(source="moduvent_common")
-
 
 
 class BaseCallbackRegistry(ABC):

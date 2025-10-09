@@ -114,6 +114,7 @@ class EventManager(BaseEventManager):
 
 class EventAwareBase(metaclass=EventMeta):
     """The base class that utilize the metaclass."""
+
     event_manager: EventManager = None
 
     def __init__(self, event_manager=None):

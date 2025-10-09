@@ -1,6 +1,13 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
 from .common import ModuleLoader, subscribe_method
-from .events import DataEvent, DataEventFactory, Event, Signal, SignalFactory
+from .events import (
+    DataEvent,
+    DataEventFactory,
+    Event,
+    EventFactory,
+    Signal,
+    SignalFactory,
+)
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
@@ -52,4 +59,5 @@ __all__ = [
     "data_event",
     "initialize",
     "reset",
+    "EventFactory",
 ]
