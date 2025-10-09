@@ -118,7 +118,7 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
 
     def _check_conditions(self):
         for condition in self.conditions:
-            if not condition(self.event_type):
+            if not condition(self.event):
                 common_logger.debug(f"Condition {condition} failed, skipping.")
                 return False
         return True
