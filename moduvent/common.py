@@ -105,7 +105,7 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
         self,
         func: Callable[[Event], None],
         event: Event,
-        conditions: list[Callable[[Event], bool]] | None = None,
+        conditions: Tuple[Callable[[Event], bool], ...] | None = None,
     ):
         self.func_type = (
             FunctionTypes.UNKNOWN
@@ -164,7 +164,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
         self._subscriptions = subscriptions
 
     @abstractmethod
-    def _append_to_callqueue(self, callback: BaseCallbackRegistry): ...
+    def _append_to_callqueue(self, callback: BCP): ...
 
     @abstractmethod
     def _get_callqueue_length(self) -> int:
@@ -206,7 +206,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
         )
 
     def _remove_subscriptions(
-        self, filter_func: Callable[[Type[Event], BaseCallbackRegistry], bool]
+        self, filter_func: Callable[[Type[Event], BCR], bool]
     ):
         new_subscriptions = {}
         for event_type, callbacks in list(self._subscriptions.items()):
@@ -256,7 +256,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP]):
         self,
         func: Callable[[Event], None],
         event_type: Type[Event],
-        conditions: Tuple[Callable[[Event], bool]],
+        *conditions: Callable[[Event], bool],
     ):
         """Wrap this function with lock in subclass"""
         callback: BCR = self.registry_class(

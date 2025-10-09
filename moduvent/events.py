@@ -22,7 +22,7 @@ class Event:
 class MutedContext:
     """A context manager to temporarily mute events"""
 
-    def __init__(self, event: Event) -> None:
+    def __init__(self, event: Type[Event]) -> None:
         self.event = event
 
     def __enter__(self) -> None:
@@ -38,7 +38,7 @@ E = TypeVar("E", bound=Event)
 class EventFactory(dict[str, Type[E]]):
     """A factory to create new event classes inheriting from given base class but with customized name."""
 
-    base_class: Type[E] = Event
+    base_class: Type[E]
 
     @classmethod
     def create(cls, base_class: Type[E] = Event) -> "EventFactory":
@@ -48,7 +48,7 @@ class EventFactory(dict[str, Type[E]]):
         instance.base_class = base_class
         return instance
 
-    def new(self, name: str = None) -> Type[E]:
+    def new(self, name: str = "") -> Type[E]:
         if not name:
             name = f"{self.base_class.__name__}_{str(uuid())}"
         if name not in self:

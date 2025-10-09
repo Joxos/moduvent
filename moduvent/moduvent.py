@@ -1,6 +1,6 @@
 from collections import deque
 from threading import RLock
-from typing import Callable, Deque, Dict, List, Type
+from typing import Callable, Deque, Dict, List, Type, Tuple
 
 from loguru import logger
 
@@ -9,6 +9,7 @@ from .common import (
     BaseCallbackRegistry,
     BaseEventManager,
     EventMeta,
+    PostCallbackRegistry,
 )
 from .events import Event
 from .utils import SUBSCRIPTION_STRATEGY
@@ -37,7 +38,7 @@ class CallbackProcessing(BaseCallbackProcessing, CallbackRegistry):
 class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
     def __init__(self):
         self._subscriptions: Dict[Type[Event], List[CallbackRegistry]] = {}
-        self._callqueue: Deque[CallbackRegistry] = deque()
+        self._callqueue: Deque[CallbackProcessing] = deque()
         self._subscription_lock = RLock()
         self._callqueue_lock = RLock()
 
@@ -55,7 +56,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
         with self._subscription_lock:
             return super()._set_subscriptions(subscriptions)
 
-    def _append_to_callqueue(self, callback):
+    def _append_to_callqueue(self, callback: CallbackProcessing):
         with self._callqueue_lock:
             self._callqueue.append(callback)
 
@@ -86,10 +87,10 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
         self,
         func: Callable[[Event], None],
         event_type: Type[Event],
-        *conditions: list[Callable[[Event], bool]],
+        *conditions: Callable[[Event], bool],
     ):
         with self._subscription_lock:
-            super().register(func=func, event_type=event_type, conditions=conditions)
+            super().register(func, event_type, *conditions)
 
     def subscribe(self, *args, **kwargs):
         """subscribe dispatcher decorator.
@@ -112,7 +113,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
             conditions = args[1:]
 
             def decorator(func: Callable[[Event], None]):
-                self.register(func=func, event_type=event_type, conditions=conditions)
+                self.register(func, event_type, *conditions)
                 return func
 
             return decorator
@@ -123,11 +124,12 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing]):
 class EventAwareBase(metaclass=EventMeta):
     """The base class that utilize the metaclass."""
 
-    event_manager: EventManager = None
+    event_manager: EventManager
+    _subscriptions: Dict[Type[Event], List[PostCallbackRegistry]] = {}
 
     def __init__(self, event_manager=None):
         if event_manager:
-            self.event_manager: EventManager = event_manager
+            self.event_manager = event_manager
         # trigger registrations
         self._register()
 
