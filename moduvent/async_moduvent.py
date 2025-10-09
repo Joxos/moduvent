@@ -107,7 +107,7 @@ class AsyncEventManager(BaseEventManager):
             def decorator(func: Callable[[Event], None]):
                 for event_type in args:
                     self._post_subscriptions.setdefault(event_type, []).append(
-                        AsyncCallbackRegistry(func=func, event=event_type)
+                        AsyncCallbackRegistry(func=func, event_type=event_type)
                     )
                 return func
 
@@ -119,7 +119,7 @@ class AsyncEventManager(BaseEventManager):
             def decorator(func: Callable[[Event], None]):
                 self._post_subscriptions.setdefault(event_type, []).append(
                     AsyncCallbackRegistry(
-                        func=func, event=event_type, conditions=conditions
+                        func=func, event_type=event_type, conditions=conditions
                     )
                 )
                 return func
@@ -157,8 +157,9 @@ class AsyncEventManager(BaseEventManager):
                 await self._append_to_callqueue(
                     self._create(
                         callback_type=CALLBACK_TYPE.PROCESSING,
-                        callback=callback,
+                        func=callback.func,
                         event=event,
+                        conditions=callback.conditions,
                     )
                 )
         self._verbose_callqueue()
@@ -186,6 +187,6 @@ class AsyncEventAwareBase(metaclass=EventMeta):
         for event_type, funcs in self._subscriptions.items():
             for func in funcs:
                 callback = AsyncCallbackRegistry(
-                    func=getattr(self, func.__name__), event=event_type
+                    func=getattr(self, func.__name__), event_type=event_type
                 )
                 await self.event_manager.register(callback)

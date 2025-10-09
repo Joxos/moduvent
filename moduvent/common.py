@@ -23,19 +23,19 @@ common_logger = logger.bind(source="moduvent_common")
 
 class BaseCallbackRegistry(ABC):
     func: WeakReference = WeakReference()
-    event: EventInheritor = EventInheritor()
+    event_type: EventInheritor = EventInheritor()
 
     def __init__(
         self,
         func: Callable[[Event], None],
-        event: Type[Event],
-        conditions: list[Callable[[Event], bool]] = None,
+        event_type: Type[Event],
+        conditions: list[Callable[[Event], bool]] | None = None,
     ):
         self.func_type = (
             FunctionTypes.UNKNOWN
         )  # we first set func_type since the setter of self.func may use it
-        self.func: weakref.ReferenceType[Callable[[Event], None]] = func
-        self.event: Type[Event] = event
+        self.func: WeakReference = func
+        self.event_type: EventInheritor = event_type
         self.conditions = conditions or []
 
         self.func_type = check_function_type(func)
@@ -53,16 +53,16 @@ class BaseCallbackRegistry(ABC):
 
     def _check_conditions(self):
         for condition in self.conditions:
-            if not condition(self.event):
+            if not condition(self.event_type):
                 common_logger.debug(f"Condition {condition} failed, skipping.")
                 return False
         return True
 
     def _shallow_copy(self, subclass: Type["BaseCallbackRegistry"]):
-        if self.func and self.event:
+        if self.func and self.event_type:
             return subclass(
                 func=self.func,  # the weakref is valid or not is checked by the setter of subclass
-                event=self.event,
+                event_type=self.event_type,
                 conditions=self.conditions,
             )
         return None
@@ -70,7 +70,7 @@ class BaseCallbackRegistry(ABC):
     def _compare_attributes(self, value: "BaseCallbackRegistry"):
         return (
             self.func == value.func
-            and self.event == value.event
+            and self.event_type == value.event_type
             and self.conditions == value.conditions
         )
 
@@ -90,14 +90,14 @@ class BaseCallbackRegistry(ABC):
 
     def __str__(self):
         instance_string = (
-            str(self.func.__self__) if hasattr(self.func, "__self__") else "None"
+            str(getattr(self.func, "__self__", "None"))
         )
         func_string = self.func.__qualname__ if self.func else self.func
-        return f"Callback: {self.event} -> {func_string} ({instance_string}:{self.func_type})"
+        return f"Callback: {self.event_type} -> {func_string} ({instance_string}:{self.func_type})"
 
 
 class PostCallbackRegistry(BaseCallbackRegistry):
-    func: Callable[[Event], None] = None
+    func: WeakReference = WeakReference()
 
     def __eq__(self, value):
         if isinstance(value, PostCallbackRegistry):
@@ -106,15 +106,23 @@ class PostCallbackRegistry(BaseCallbackRegistry):
 
 
 class BaseCallbackProcessing(BaseCallbackRegistry, ABC):
+    func: WeakReference = WeakReference()
     event: EventInstance = EventInstance()
 
-    def __init__(self, callback: BaseCallbackRegistry, event: Event):
-        if callback.func:
-            super().__init__(
-                func=callback.func,
-                event=event,
-                conditions=callback.conditions,
-            )
+    def __init__(
+        self,
+        func: Callable[[Event], None],
+        event: Type[Event],
+        conditions: list[Callable[[Event], bool]] | None = None,
+    ):
+        self.func_type = (
+            FunctionTypes.UNKNOWN
+        )  # we first set func_type since the setter of self.func may use it
+        self.func: WeakReference = func
+        self.event: EventInstance = event
+        self.conditions = conditions or []
+
+        self.func_type = check_function_type(func)
 
     @abstractmethod
     def call(self):
@@ -268,10 +276,10 @@ class BaseEventManager(ABC):
         callback = self._create(
             callback_type=CALLBACK_TYPE.REGISTRY,
             func=func,
-            event=event_type,
+            event_type=event_type,
             conditions=conditions,
         )
-        self._subscriptions.setdefault(callback.event, []).append(callback)
+        self._subscriptions.setdefault(callback.event_type, []).append(callback)
         common_logger.debug(f"Registered {callback}")
 
     def verbose_subscriptions(self):
@@ -311,8 +319,9 @@ class BaseEventManager(ABC):
                 self._append_to_callqueue(
                     self._create(
                         callback_type=CALLBACK_TYPE.PROCESSING,
-                        callback=callback,
+                        func=callback.func,
                         event=event,
+                        conditions=callback.conditions,
                     )
                 )
 
@@ -335,7 +344,7 @@ def subscribe_method(*args, **kwargs):
                 func._subscriptions = {}  # note that function member does not support type hint
             for event_type in args:
                 func._subscriptions.setdefault(event_type, []).append(
-                    PostCallbackRegistry(func=func, event=event_type)
+                    PostCallbackRegistry(func=func, event_type=event_type)
                 )
                 common_logger.debug(
                     f"{func.__qualname__}._subscriptions[{event_type}] is set."
@@ -351,7 +360,7 @@ def subscribe_method(*args, **kwargs):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # note that function member does not support type hint
             func._subscriptions.setdefault(event_type, []).append(
-                PostCallbackRegistry(func=func, event=event_type, conditions=conditions)
+                PostCallbackRegistry(func=func, event_type=event_type, conditions=conditions)
             )
             common_logger.debug(
                 f"{func.__qualname__}._subscriptions[{event_type}] = {conditions}"

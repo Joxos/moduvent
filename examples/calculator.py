@@ -17,7 +17,7 @@ class BinaryCalculation(Event):
         self.id = id
         self.a = a
         self.b = b
-        self.string = f"{a} {b}"
+        self.string = ""
 
 
 BinaryCalculationFactory = EventFactory.create(BinaryCalculation)
