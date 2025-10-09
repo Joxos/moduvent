@@ -2,7 +2,7 @@ import importlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar
+from typing import Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar, ParamSpec, Concatenate
 
 from loguru import logger
 
@@ -292,9 +292,10 @@ def subscribe_method(*args, **kwargs):
     If arguments after the second argument is not same, then it will raise a ValueError.
     """
     strategy = _get_subscription_strategy(*args, **kwargs)
+    P = ParamSpec("P")
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def decorator(func: Callable[[Event], None]):
+        def events_decorator(func: Callable[Concatenate[Event, P], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -306,12 +307,12 @@ def subscribe_method(*args, **kwargs):
                 )
             return func
 
-        return decorator
+        return events_decorator
     elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
         event_type = args[0]
         conditions = args[1:]
 
-        def decorator(func: Callable[[Event], None]):
+        def conditions_decorator(func: Callable[Concatenate[Event, P], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
@@ -324,7 +325,7 @@ def subscribe_method(*args, **kwargs):
             )
             return func
 
-        return decorator
+        return conditions_decorator
     else:
         raise ValueError(f"Invalid subscription strategy {strategy}")
 
