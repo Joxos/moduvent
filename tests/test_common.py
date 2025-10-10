@@ -158,13 +158,10 @@ def test_emit_check(event, enabled, expected_valid, expected_type, monkeypatch):
     # Assert
 
     assert valid == expected_valid
-    if valid:
-        assert event_type is type(event)
+    if not valid and isinstance(event, str):
+        assert event_type == event
     else:
-        if isinstance(event, str):
-            assert event_type == event
-        else:
-            assert event_type is type(event)
+        assert event_type is type(event)
 
 
 def test_register_and_emit_happy_path(patch_common_logger):

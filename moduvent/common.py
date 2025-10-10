@@ -159,6 +159,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     _callqueue = None
     _subscription_lock = None
     _callqueue_lock = None
+    halted = False
 
     @property
     @abstractmethod
@@ -167,11 +168,6 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     @property
     @abstractmethod
     def processing_class(cls) -> Type[BCP]: ...
-
-    @abstractmethod
-    def __init__(self):
-        """Note that the correct registry_class and processing_class should be set in the subclass here."""
-        ...
 
     @abstractmethod
     def _set_subscriptions(self, subscriptions: Dict[Type[E], List[BCR]]):
@@ -191,10 +187,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         """Reset the subscriptions."""
         ...
 
-    @abstractmethod
     def halt(self):
-        """Clear the callqueue."""
-        ...
+        """Halt the event manager by setting self.halted to True."""
+        self.halted = True
 
     def _remove_subscriptions(self, filter_func: Callable[[Type[E], BCR], bool]):
         new_subscriptions = defaultdict(list)
@@ -266,6 +261,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         self._unsubscribe_process_logic(func, event_type)
 
     def _emit_check(self, event: E):
+        if self.halted:
+            common_logger.debug("Event manager is halted, skipping.")
+            return False, event
         if not is_instance_and_subclass(event):
             common_logger.warning(f"Skipping non-instance event: {event}")
             return False, event

@@ -97,6 +97,8 @@ class AsyncEventManager(
             self._subscriptions.clear()
 
     async def _process_callqueue(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
+        if self.halted:
+            return
         # note that asyncio.Queue is not iterable
         async_moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
         # for i in range(self._get_callqueue_length()):

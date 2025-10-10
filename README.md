@@ -105,6 +105,12 @@ unsubscribe(handle_user_login)
 unsubscribe(UserLoggedIn)
 ```
 
+It is critically important to unsubscribe subscriptions before deleting objects.
+
+### Clear and halt
+
+Use `clear` to remove all subscriptions and `halt` to stop the event system.
+
 ### Module System
 
 Moduvent includes a dynamic module loader for plugin architecture:

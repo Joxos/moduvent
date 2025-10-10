@@ -72,6 +72,8 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
             self._callqueue.clear()
 
     def _process_callqueue(self):
+        if self.halted:
+            return
         moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
         for callback in self._callqueue:
             moduvent_logger.debug(f"\t{callback}")
