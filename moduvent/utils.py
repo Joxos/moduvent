@@ -28,17 +28,18 @@ class FunctionTypes(Enum):
 
 def check_function_type(func):
     type_name = func.__class__.__name__
-    if type_name == "staticmethod":
-        return FunctionTypes.STATICMETHOD
-    elif type_name == "method":
-        return FunctionTypes.BOUND_METHOD
-    elif type_name == "function":
-        if hasattr(func, "_subscriptions"):
-            return FunctionTypes.UNBOUND_METHOD
-        else:
-            return FunctionTypes.FUNCTION
-    else:
-        return FunctionTypes.UNKNOWN
+    match type_name:
+        case "staticmethod":
+            return FunctionTypes.STATICMETHOD
+        case "method":
+            return FunctionTypes.BOUND_METHOD
+        case "function":
+            if hasattr(func, "_subscriptions"):
+                return FunctionTypes.UNBOUND_METHOD
+            else:
+                return FunctionTypes.FUNCTION
+        case _:
+            return FunctionTypes.UNKNOWN
 
 
 class SUBSCRIPTION_STRATEGY(Enum):
