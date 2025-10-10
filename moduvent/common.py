@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+from collections import defaultdict
 from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
@@ -154,7 +155,7 @@ BCP = TypeVar("BCP", bound=BaseCallbackProcessing)
 
 
 class BaseEventManager(ABC, Generic[BCR, BCP, E]):
-    _subscriptions: Dict[Type[E], List[BCR]] = {}
+    _subscriptions: Dict[Type[E], List[BCR]] = defaultdict(list)
     _callqueue = None
     _subscription_lock = None
     _callqueue_lock = None
@@ -193,7 +194,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         for event_type, callbacks in list(self._subscriptions.items()):
             for cb in callbacks:
                 if not filter_func(event_type, cb):
-                    new_subscriptions.setdefault(event_type, []).append(cb)
+                    new_subscriptions[event_type].append(cb)
                 else:
                     common_logger.debug(f"Removing subscription: {cb}")
 
@@ -245,7 +246,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             event_type=event_type,
             conditions=conditions,
         )
-        self._subscriptions.setdefault(callback.event_type, []).append(callback)
+        self._subscriptions[callback.event_type].append(callback)
         common_logger.debug(f"Registered {callback}")
 
     def unsubscribe(
@@ -300,9 +301,9 @@ def subscribe_method(*args, **kwargs):
 
         def events_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
             if not hasattr(func, "_subscriptions"):
-                func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
+                func._subscriptions = defaultdict(list)  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
-                func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
+                func._subscriptions[event_type].append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
                     PostCallbackRegistry(func=func, event_type=event_type)
                 )
                 common_logger.debug(
@@ -318,7 +319,7 @@ def subscribe_method(*args, **kwargs):
         def conditions_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
-            func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
+            func._subscriptions[event_type].append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
                 PostCallbackRegistry(
                     func=func, event_type=event_type, conditions=conditions
                 )

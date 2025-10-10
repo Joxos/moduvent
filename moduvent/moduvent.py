@@ -1,4 +1,4 @@
-from collections import deque
+from collections import defaultdict, deque
 from collections.abc import Callable
 from threading import RLock
 from typing import Deque, Dict, Generic, List, Type
@@ -37,7 +37,7 @@ class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
 # and a registration is the process of adding a method to the list of callbacks for a particular event.
 class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
     def __init__(self):
-        self._subscriptions: Dict[Type[E], List[CallbackRegistry]] = {}
+        self._subscriptions: Dict[Type[E], List[CallbackRegistry]] = defaultdict(list)
         self._callqueue: Deque[CallbackProcessing] = deque()
         self._subscription_lock = RLock()
         self._callqueue_lock = RLock()

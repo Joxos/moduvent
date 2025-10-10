@@ -1,3 +1,4 @@
+from collections import defaultdict
 from types import new_class
 from typing import Any, Type, TypeVar
 from uuid import uuid4 as uuid
@@ -90,12 +91,12 @@ class EventMeta(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
 
-        _subscriptions = {}
+        _subscriptions = defaultdict(list)
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if hasattr(attr_value, "_subscriptions"):
                 for event_type in attr_value._subscriptions:
-                    _subscriptions.setdefault(event_type, []).extend(
+                    _subscriptions[event_type].extend(
                         attr_value._subscriptions[event_type]
                     )
 

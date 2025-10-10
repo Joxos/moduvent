@@ -1,5 +1,6 @@
 import asyncio
 from abc import abstractmethod
+from collections import defaultdict
 from collections.abc import Callable
 from threading import RLock
 from typing import Any, Awaitable, Dict, Generic, List, Tuple, Type
@@ -55,8 +56,12 @@ class AsyncEventManager(
     BaseEventManager[AsyncCallbackRegistry, AsyncCallbackProcessing, E]
 ):
     def __init__(self):
-        self._subscriptions: Dict[Type[E], List[AsyncCallbackRegistry]] = {}
-        self._post_subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
+        self._subscriptions: Dict[Type[E], List[AsyncCallbackRegistry]] = defaultdict(
+            list
+        )
+        self._post_subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = (
+            defaultdict(list)
+        )
         self._callqueue: asyncio.Queue[AsyncCallbackProcessing] = asyncio.Queue()
         self._subscription_lock = asyncio.Lock()
         self._post_subscription_lock = RLock()
@@ -141,7 +146,7 @@ class AsyncEventManager(
                 func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
             ):
                 for event_type in args:
-                    self._post_subscriptions.setdefault(event_type, []).append(
+                    self._post_subscriptions[event_type].append(
                         PostCallbackRegistry(func=func, event_type=event_type)
                     )
                 return func
@@ -154,7 +159,7 @@ class AsyncEventManager(
             def conditions_decorator(
                 func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
             ):
-                self._post_subscriptions.setdefault(event_type, []).append(
+                self._post_subscriptions[event_type].append(
                     PostCallbackRegistry(
                         func=func, event_type=event_type, conditions=conditions
                     )
