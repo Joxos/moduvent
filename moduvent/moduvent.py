@@ -28,7 +28,7 @@ class CallbackRegistry(BaseCallbackRegistry[E]):
 
 class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
     def call(self) -> None:
-        if super().callable():
+        if super().is_callable():
             try:
                 self.func(self.event)
             except Exception as e:

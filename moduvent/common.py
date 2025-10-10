@@ -138,7 +138,7 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
                 return False
         return True
 
-    def callable(self) -> Literal[True] | NoReturn:
+    def is_callable(self) -> Literal[True] | NoReturn:
         """Check if conditions are met. Otherwise raise an error."""
         return (
             True

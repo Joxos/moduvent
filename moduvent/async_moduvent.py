@@ -43,7 +43,7 @@ class AsyncCallbackRegistry(BaseCallbackRegistry[E]):
 
 class AsyncCallbackProcessing(BaseCallbackProcessing[E], AsyncCallbackRegistry):
     async def call(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        if super().callable():
+        if super().is_callable():
             try:
                 await self.func(self.event)
             except Exception as e:
