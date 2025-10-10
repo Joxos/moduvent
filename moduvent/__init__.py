@@ -1,21 +1,34 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import ModuleLoader, subscribe_method
-from .events import DataEvent, DataEventFactory, Event, Signal, SignalFactory
+from .common import subscribe_method
+from .events import (
+    DataEvent,
+    DataEventFactory,
+    Event,
+    EventFactory,
+    Signal,
+    SignalFactory,
+)
+from .module_loader import ModuleLoader
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
-verbose_subscriptions = event_manager.verbose_subscriptions
+EventAwareBase.event_manager = event_manager
 register = event_manager.register
 subscribe = event_manager.subscribe
 unsubscribe = event_manager.unsubscribe
 emit = event_manager.emit
+reset = event_manager.reset
+halt = event_manager.halt
 
 aevent_manager = AsyncEventManager()
-averbose_subscriptions = aevent_manager.verbose_subscriptions
+AsyncEventAwareBase.event_manager = aevent_manager
 aregister = aevent_manager.register
 asubscribe = aevent_manager.subscribe
 aunsubscribe = aevent_manager.unsubscribe
 aemit = aevent_manager.emit
+initialize = aevent_manager.initialize
+areset = aevent_manager.reset
+ahalt = aevent_manager.halt
 
 module_loader = ModuleLoader()
 discover_modules = module_loader.discover_modules
@@ -45,4 +58,9 @@ __all__ = [
     "signal",
     "DataEvent",
     "data_event",
+    "initialize",
+    "reset",
+    "EventFactory",
+    "halt",
+    "ahalt",
 ]
