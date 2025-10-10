@@ -18,6 +18,7 @@ subscribe = event_manager.subscribe
 unsubscribe = event_manager.unsubscribe
 emit = event_manager.emit
 reset = event_manager.reset
+halt = event_manager.halt
 
 aevent_manager = AsyncEventManager()
 AsyncEventAwareBase.event_manager = aevent_manager
@@ -27,6 +28,7 @@ aunsubscribe = aevent_manager.unsubscribe
 aemit = aevent_manager.emit
 initialize = aevent_manager.initialize
 areset = aevent_manager.reset
+ahalt = aevent_manager.halt
 
 module_loader = ModuleLoader()
 discover_modules = module_loader.discover_modules
@@ -59,4 +61,6 @@ __all__ = [
     "initialize",
     "reset",
     "EventFactory",
+    "halt",
+    "ahalt",
 ]

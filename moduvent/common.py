@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
@@ -187,11 +187,18 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         ...
 
     @abstractmethod
-    def reset(self): ...
+    def reset(self):
+        """Reset the subscriptions."""
+        ...
+
+    @abstractmethod
+    def halt(self):
+        """Clear the callqueue."""
+        ...
 
     def _remove_subscriptions(self, filter_func: Callable[[Type[E], BCR], bool]):
-        new_subscriptions = {}
-        for event_type, callbacks in list(self._subscriptions.items()):
+        new_subscriptions = defaultdict(list)
+        for event_type, callbacks in self._subscriptions.items():
             for cb in callbacks:
                 if not filter_func(event_type, cb):
                     new_subscriptions[event_type].append(cb)
@@ -222,6 +229,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 )
                 return
             self._remove_subscriptions(lambda e, c: e == event_type and c == func)
+            common_logger.debug(f"Removed subscription for {event_type} and {func}")
         elif func:
             self._remove_subscriptions(lambda e, c: c == func)
             common_logger.debug(f"Removed all callbacks for {func}")

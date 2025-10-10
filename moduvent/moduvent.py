@@ -19,9 +19,11 @@ moduvent_logger = logger.bind(source="moduvent_sync")
 
 class CallbackRegistry(BaseCallbackRegistry[E]):
     def __eq__(self, value):
-        if isinstance(value, CallbackRegistry):
-            return super()._compare_attributes(value)
-        return super().__eq__(value)
+        return (
+            super()._compare_attributes(value)
+            if isinstance(value, CallbackRegistry)
+            else super().__eq__(value)
+        )
 
 
 class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
@@ -64,6 +66,10 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
     def reset(self):
         with self._subscription_lock:
             self._subscriptions.clear()
+
+    def halt(self):
+        with self._callqueue_lock:
+            self._callqueue.clear()
 
     def _process_callqueue(self):
         moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
