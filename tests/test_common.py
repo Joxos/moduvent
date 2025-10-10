@@ -29,19 +29,6 @@ def patch_common_logger(monkeypatch):
     return logger_mock
 
 
-@pytest.fixture(autouse=True)
-def patch_utils(monkeypatch):
-    # Patch is_class_and_subclass and is_instance_and_subclass
-    monkeypatch.setattr(
-        "moduvent.common.is_class_and_subclass", lambda x: isinstance(x, type)
-    )
-    monkeypatch.setattr(
-        "moduvent.common.is_instance_and_subclass",
-        lambda x: isinstance(x, object) and hasattr(x, "__class__"),
-    )
-    return
-
-
 @pytest.mark.parametrize(
     "func,event_type,expected_error",
     [
