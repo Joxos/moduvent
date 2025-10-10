@@ -2,7 +2,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Callable
 from threading import RLock
-from typing import Awaitable, Concatenate, Dict, Generic, List, ParamSpec, Tuple, Type
+from typing import Any, Awaitable, Dict, Generic, List, Tuple, Type
 
 from loguru import logger
 
@@ -136,10 +136,11 @@ class AsyncEventManager(
 
     def subscribe(self, *args, **kwargs):
         strategy = get_subscription_strategy(*args, **kwargs)
-        P = ParamSpec("P")
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-            def events_decorator(func: Callable[Concatenate[E, P], Awaitable]):
+            def events_decorator(
+                func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
+            ):
                 for event_type in args:
                     self._post_subscriptions.setdefault(event_type, []).append(
                         PostCallbackRegistry(func=func, event_type=event_type)
@@ -151,7 +152,9 @@ class AsyncEventManager(
             event_type = args[0]
             conditions = args[1:]
 
-            def conditions_decorator(func: Callable[Concatenate[E, P], Awaitable]):
+            def conditions_decorator(
+                func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
+            ):
                 self._post_subscriptions.setdefault(event_type, []).append(
                     PostCallbackRegistry(
                         func=func, event_type=event_type, conditions=conditions

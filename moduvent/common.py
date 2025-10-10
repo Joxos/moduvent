@@ -3,12 +3,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import (
+    Any,
     Dict,
     Generic,
     List,
     Literal,
     NoReturn,
-    ParamSpec,
     Tuple,
     Type,
     TypeVar,
@@ -104,7 +104,7 @@ class PostCallbackRegistry(BaseCallbackRegistry[E], Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], None | Awaitable],
+        func: Callable[[E], None | Awaitable] | Callable[[Any, E], None | Awaitable],
         event_type: Type[E],
         conditions: Tuple[Callable[[E], bool], ...] = (),
     ) -> None:
@@ -308,10 +308,9 @@ def subscribe_method(*args, **kwargs):
     If arguments after the second argument is not same, then it will raise a ValueError.
     """
     strategy = get_subscription_strategy(*args, **kwargs)
-    P = ParamSpec("P")
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[[E], None]):
+        def events_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -328,7 +327,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[[E], None]):
+        def conditions_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
