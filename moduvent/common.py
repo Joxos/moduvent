@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import (
-    Concatenate,
     Dict,
     Generic,
     List,
@@ -261,13 +260,6 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         self._subscriptions.setdefault(callback.event_type, []).append(callback)
         common_logger.debug(f"Registered {callback}")
 
-    def verbose_subscriptions(self):
-        common_logger.debug("Subscriptions:")
-        for event_type, callbacks in self._subscriptions.items():
-            common_logger.debug(f"\t{event_type.__qualname__} ({len(callbacks)}):")
-            for callback in callbacks:
-                common_logger.debug(f"\t\t{callback}")
-
     def unsubscribe(
         self,
         func: Callable[[E], None] | None = None,
@@ -319,7 +311,7 @@ def subscribe_method(*args, **kwargs):
     P = ParamSpec("P")
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[Concatenate[E, P], None]):
+        def events_decorator(func: Callable[[E], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -336,7 +328,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[Concatenate[E, P], None]):
+        def conditions_decorator(func: Callable[[E], None]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions.setdefault(event_type, []).append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
