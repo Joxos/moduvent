@@ -1,18 +1,6 @@
-import importlib
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    List,
-    Literal,
-    NoReturn,
-    Tuple,
-    Type,
-    TypeVar,
-)
+from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
 
@@ -343,60 +331,3 @@ def subscribe_method(*args, **kwargs):
         return conditions_decorator
     else:
         raise ValueError(f"Invalid subscription strategy {strategy}")
-
-
-class EventMeta(type):
-    """Define a new class with events info gathered after class creation."""
-
-    def __new__(cls, name, bases, attrs):
-        new_class = super().__new__(cls, name, bases, attrs)
-
-        _subscriptions = {}
-        for attr_name, attr_value in attrs.items():
-            # find all subscriptions of methods
-            if hasattr(attr_value, "_subscriptions"):
-                for event_type in attr_value._subscriptions:
-                    _subscriptions.setdefault(event_type, []).extend(
-                        attr_value._subscriptions[event_type]
-                    )
-
-        new_class._subscriptions = _subscriptions  # pyright: ignore[reportAttributeAccessIssue] (surpress because it's metaclass)
-        return new_class
-
-
-class ModuleLoader:
-    def __init__(self):
-        self.loaded_modules = set()
-
-    def discover_modules(self, modules_dir: str = "modules"):
-        modules_path = Path(modules_dir)
-
-        if not modules_path.exists():
-            common_logger.warning(f"Module directory does not exist: {modules_dir}")
-            return
-
-        for item in modules_path.iterdir():
-            if item.is_dir() and not item.name.startswith("__"):
-                try:
-                    module_name = f"{modules_dir}.{item.name}"
-                    self.load_module(module_name)
-                    common_logger.debug(f"Discovered module: {module_name}")
-                except ImportError as e:
-                    common_logger.error(f"Failed to load module {item.name}: {e}")
-                except Exception as ex:
-                    common_logger.exception(
-                        f"Unexpected error occurred while loading module {item.name}: {ex}"
-                    )
-
-    def load_module(self, module_name: str):
-        if module_name in self.loaded_modules:
-            common_logger.debug(f"Module already loaded: {module_name}")
-            return
-
-        try:
-            importlib.import_module(module_name)
-            self.loaded_modules.add(module_name)
-            common_logger.debug(f"Successfully loaded module: {module_name}")
-
-        except ImportError as e:
-            common_logger.exception(f"Error while loading module {module_name}: {e}")

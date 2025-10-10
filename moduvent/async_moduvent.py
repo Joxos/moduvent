@@ -10,10 +10,9 @@ from .common import (
     BaseCallbackProcessing,
     BaseCallbackRegistry,
     BaseEventManager,
-    EventMeta,
     PostCallbackRegistry,
 )
-from .events import E
+from .events import E, EventMeta
 from .utils import SUBSCRIPTION_STRATEGY, get_subscription_strategy
 
 async_moduvent_logger = logger.bind(source="moduvent_async")

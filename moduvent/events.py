@@ -82,3 +82,22 @@ class DataEvent(Signal):
 
 
 DataEventFactory = EventFactory.create(DataEvent)
+
+
+class EventMeta(type):
+    """Define a new class with events info gathered after class creation."""
+
+    def __new__(cls, name, bases, attrs):
+        new_class = super().__new__(cls, name, bases, attrs)
+
+        _subscriptions = {}
+        for attr_name, attr_value in attrs.items():
+            # find all subscriptions of methods
+            if hasattr(attr_value, "_subscriptions"):
+                for event_type in attr_value._subscriptions:
+                    _subscriptions.setdefault(event_type, []).extend(
+                        attr_value._subscriptions[event_type]
+                    )
+
+        new_class._subscriptions = _subscriptions  # pyright: ignore[reportAttributeAccessIssue] (surpress because it's metaclass)
+        return new_class

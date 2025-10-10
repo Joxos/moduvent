@@ -1,5 +1,5 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import ModuleLoader, subscribe_method
+from .common import subscribe_method
 from .events import (
     DataEvent,
     DataEventFactory,
@@ -8,6 +8,7 @@ from .events import (
     Signal,
     SignalFactory,
 )
+from .module_loader import ModuleLoader
 from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
