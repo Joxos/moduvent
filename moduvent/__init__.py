@@ -12,7 +12,6 @@ from .moduvent import EventAwareBase, EventManager
 
 event_manager = EventManager()
 EventAwareBase.event_manager = event_manager
-verbose_subscriptions = event_manager.verbose_subscriptions
 register = event_manager.register
 subscribe = event_manager.subscribe
 unsubscribe = event_manager.unsubscribe
@@ -21,7 +20,6 @@ reset = event_manager.reset
 
 aevent_manager = AsyncEventManager()
 AsyncEventAwareBase.event_manager = aevent_manager
-averbose_subscriptions = aevent_manager.verbose_subscriptions
 aregister = aevent_manager.register
 asubscribe = aevent_manager.subscribe
 aunsubscribe = aevent_manager.unsubscribe
