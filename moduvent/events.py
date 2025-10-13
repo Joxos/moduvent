@@ -4,29 +4,10 @@ from typing import Any, Type, TypeVar
 from uuid import uuid4 as uuid
 
 
-class Event:
-    """Base event class"""
-
-    enabled: bool = True
-
-    @classmethod
-    def muted(cls) -> "MutedContext":
-        """Return a context manager to temporarily mute the event"""
-        return MutedContext(cls)
-
-    def __str__(self) -> str:
-        # get all attributes without the ones starting with __
-        attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
-        return f"{type(self).__qualname__}({', '.join(attrs)})"
-
-
-E = TypeVar("E", bound=Event)
-
-
 class MutedContext:
     """A context manager to temporarily mute events"""
 
-    def __init__(self, event: Type[Event]) -> None:
+    def __init__(self, event: Type["Event"]) -> None:
         self.event = event
 
     def __enter__(self) -> None:
@@ -34,6 +15,22 @@ class MutedContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.event.enabled = True
+
+
+class Event:
+    """Base event class"""
+
+    enabled: bool = True
+
+    @classmethod
+    def muted(cls) -> MutedContext:
+        """Return a context manager to temporarily mute the event"""
+        return MutedContext(cls)
+
+    def __str__(self) -> str:
+        # get all attributes without the ones starting with __
+        attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
+        return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
 E = TypeVar("E", bound=Event)
