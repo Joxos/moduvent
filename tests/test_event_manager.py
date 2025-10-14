@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from moduvent import Event, EventManager
 from moduvent.utils import SUBSCRIPTION_STRATEGY
 

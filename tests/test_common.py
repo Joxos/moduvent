@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, call
 
 import pytest
-
 from moduvent import EventManager
 from moduvent.events import Event
 from moduvent.moduvent import CallbackProcessing, CallbackRegistry

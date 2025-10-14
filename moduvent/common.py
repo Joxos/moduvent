@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar, Optional
 
 from loguru import logger
 
@@ -25,7 +25,7 @@ class BaseCallbackRegistry(ABC, Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], None | Awaitable],
+        func: Callable[[E], Any | Awaitable],
         event_type: Type[E],
         conditions: Tuple[Callable[[E], bool], ...] = (),
     ) -> None:
@@ -93,7 +93,7 @@ class PostCallbackRegistry(BaseCallbackRegistry[E], Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], None | Awaitable] | Callable[[Any, E], None | Awaitable],
+        func: Callable[[E], Any | Awaitable] | Callable[[Any, E], Any | Awaitable],
         event_type: Type[E],
         conditions: Tuple[Callable[[E], bool], ...] = (),
     ) -> None:
@@ -118,7 +118,7 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], None],
+        func: Callable[[E], Any],
         event: E,
         conditions: Tuple[Callable[[Event], bool], ...] | None = None,
     ):
@@ -203,7 +203,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         self._set_subscriptions(new_subscriptions)
 
     def _unsubscribe_check_args(
-        self, func: Callable[[E], None] | None, event_type: Type[E] | None
+        self, func: Callable[[E], Any] | None, event_type: Type[E] | None
     ):
         if not func and not event_type:
             raise ValueError(
@@ -215,7 +215,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             )
 
     def _unsubscribe_process_logic(
-        self, func: Callable[[E], None] | None, event_type: Type[E] | None
+        self, func: Callable[[E], Any] | None, event_type: Type[E] | None
     ):
         if func and event_type:
             if event_type not in self._subscriptions:
@@ -234,12 +234,12 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 common_logger.debug(f"Cleared all subscriptions for {event_type}")
 
     @abstractmethod
-    def _process_callqueue(self): ...
+    def _process_callqueue(self) -> Optional[List]: ...
 
     @abstractmethod
     def register(
         self,
-        func: Callable[[E], None],
+        func: Callable[[E], Any],
         event_type: Type[E],
         *conditions: Callable[[E], bool],
     ):
@@ -254,7 +254,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
 
     def unsubscribe(
         self,
-        func: Callable[[E], None] | None = None,
+        func: Callable[[E], Any] | None = None,
         event_type: Type[E] | None = None,
     ):
         self._unsubscribe_check_args(func, event_type)
@@ -292,7 +292,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                     )
                 )
 
-        self._process_callqueue()
+        return self._process_callqueue()
 
 
 def subscribe_method(*args, **kwargs):

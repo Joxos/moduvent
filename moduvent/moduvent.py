@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from collections.abc import Callable
 from threading import RLock
-from typing import Deque, Dict, Generic, List, Type
+from typing import Deque, Dict, Generic, List, Type, Any
 
 from loguru import logger
 
@@ -27,10 +27,10 @@ class CallbackRegistry(BaseCallbackRegistry[E]):
 
 
 class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
-    def call(self) -> None:
+    def call(self):
         if super().is_callable():
             try:
-                self.func(self.event)
+                return self.func(self.event)
             except Exception as e:
                 moduvent_logger.exception(f"Error while processing {self}: {e}")
 
@@ -78,20 +78,22 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         for callback in self._callqueue:
             moduvent_logger.debug(f"\t{callback}")
         moduvent_logger.debug("Processing callqueue...")
+        results = []
         with self._callqueue_lock:
             while self._callqueue:
                 callback = self._callqueue.popleft()
                 moduvent_logger.debug(f"Calling {callback}")
                 try:
-                    callback.call()
+                    results.append(callback.call())
                 except Exception as e:
                     moduvent_logger.exception(f"Error while processing callback: {e}")
                     continue
         moduvent_logger.debug("End processing callqueue.")
+        return results
 
     def register(
         self,
-        func: Callable[[E], None],
+        func: Callable[[E], Any],
         event_type: Type[E],
         *conditions: Callable[[E], bool],
     ):
@@ -108,21 +110,21 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         strategy = get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-            def decorator(func: Callable[[E], None]):
+            def events_decorator(func: Callable[[E], Any]):
                 for event_type in args:
                     self.register(func=func, event_type=event_type)
                 return func
 
-            return decorator
+            return events_decorator
         elif strategy == SUBSCRIPTION_STRATEGY.CONDITIONS:
             event_type = args[0]
             conditions = args[1:]
 
-            def decorator(func: Callable[[E], None]):
+            def conditions_decorator(func: Callable[[E], Any]):
                 self.register(func, event_type, *conditions)
                 return func
 
-            return decorator
+            return conditions_decorator
         else:
             raise ValueError(f"Invalid subscription strategy {strategy}")
 

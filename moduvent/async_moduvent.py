@@ -45,7 +45,7 @@ class AsyncCallbackProcessing(BaseCallbackProcessing[E], AsyncCallbackRegistry):
     async def call(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         if super().is_callable():
             try:
-                await self.func(self.event)
+                return await self.func(self.event)
             except Exception as e:
                 async_moduvent_logger.exception(f"Error while calling {self}: {e}")
 
@@ -107,12 +107,13 @@ class AsyncEventManager(
         #     self._callqueue.put_nowait(callback)
         async_moduvent_logger.debug("Processing callqueue...")
         # The asyncio.Queue is naturally corotine-safe
+        tasks = []
         async with asyncio.TaskGroup() as group:
             while not self._callqueue.empty():
                 callback = await self._callqueue.get()
                 async_moduvent_logger.debug(f"Calling {callback}...")
                 try:
-                    group.create_task(callback.call())
+                    tasks.append(group.create_task(callback.call()))
                     self._callqueue.task_done()
                 except Exception as e:
                     async_moduvent_logger.exception(
@@ -121,6 +122,7 @@ class AsyncEventManager(
                     continue
             await self._callqueue.join()
         async_moduvent_logger.debug("End processing callqueue.")
+        return [task.result() for task in tasks]
 
     async def register(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         self,
