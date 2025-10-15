@@ -234,7 +234,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 common_logger.debug(f"Cleared all subscriptions for {event_type}")
 
     @abstractmethod
-    def _process_callqueue(self) -> Optional[List]: ...
+    def _process_callqueue(self) -> List: ...
 
     @abstractmethod
     def register(
@@ -273,10 +273,10 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             return False, event_type
         return True, event_type
 
-    def emit(self, event: E):
+    def emit(self, event: E) -> List:
         valid, event_type = self._emit_check(event)
         if not valid:
-            return
+            return []
         common_logger.debug(f"Emitting {event}")
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
