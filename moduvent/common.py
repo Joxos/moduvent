@@ -138,13 +138,11 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
                 return False
         return True
 
-    def is_callable(self) -> Literal[True] | NoReturn:
+    def is_callable(self) -> bool | NoReturn:
         """Check if conditions are met. Otherwise raise an error."""
-        return (
-            True
-            if self.func and self._func_type_valid() and self._check_conditions()
-            else self._report_function()
-        )
+        if not self._func_type_valid():
+            self._report_function()
+        return bool(self._check_conditions())
 
     @abstractmethod
     def call(self): ...
@@ -305,7 +303,7 @@ def subscribe_method(*args, **kwargs):
     strategy = get_subscription_strategy(*args, **kwargs)
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
+        def events_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = defaultdict(list)  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -322,7 +320,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
+        def conditions_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions[event_type].append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
