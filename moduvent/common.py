@@ -67,6 +67,14 @@ class BaseCallbackRegistry(ABC, Generic[E]):
             and self.conditions == value.conditions
         )
 
+    def _check_conditions(self, event: E):
+        for condition in self.conditions:
+            if not condition(event):
+                common_logger.debug(f"Condition {condition} failed, skipping.")
+                return False
+        return True
+
+
     @abstractmethod
     def __eq__(self, value):
         return (
@@ -131,18 +139,11 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
 
         self.func_type = check_function_type(func)
 
-    def _check_conditions(self):
-        for condition in self.conditions:
-            if not condition(self.event):
-                common_logger.debug(f"Condition {condition} failed, skipping.")
-                return False
-        return True
-
     def is_callable(self) -> bool | NoReturn:
         """Check if conditions are met. Otherwise raise an error."""
         if not self._func_type_valid():
             self._report_function()
-        return bool(self._check_conditions())
+        return bool(self._check_conditions(self.event))
 
     @abstractmethod
     def call(self): ...
@@ -282,6 +283,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
+                if not callback._check_conditions(event):
+                    common_logger.debug(f"Skipping {callback} due to conditions not met.")
+                    continue
                 self._append_to_callqueue(
                     self.processing_class(
                         func=callback.func,
