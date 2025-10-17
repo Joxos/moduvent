@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from collections.abc import Callable
 from threading import RLock
-from typing import Deque, Dict, Generic, List, Type, Any
+from typing import Any, Deque, Dict, Generic, List, Type
 
 from loguru import logger
 

@@ -1,4 +1,5 @@
 import pytest
+
 from moduvent import (
     DataEvent,
     Signal,

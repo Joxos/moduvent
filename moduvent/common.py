@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar, Optional
+from typing import Any, Dict, Generic, List, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
 
@@ -73,7 +73,6 @@ class BaseCallbackRegistry(ABC, Generic[E]):
                 common_logger.debug(f"Condition {condition} failed, skipping.")
                 return False
         return True
-
 
     @abstractmethod
     def __eq__(self, value):
@@ -284,7 +283,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             )
             for callback in callbacks:
                 if not callback._check_conditions(event):
-                    common_logger.debug(f"Skipping {callback} due to conditions not met.")
+                    common_logger.debug(
+                        f"Skipping {callback} due to conditions not met."
+                    )
                     continue
                 self._append_to_callqueue(
                     self.processing_class(
