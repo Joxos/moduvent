@@ -1,6 +1,6 @@
 [project]
 name = "moduvent"
-version = "5.3"
+version = "5.8"
 authors = [
     { name = "Joxos", email = "xujunhao61@163.com" }
 ]
@@ -15,5 +15,4 @@ dependencies = [
 dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
-    "setuptools>=80.9.0",
 ]

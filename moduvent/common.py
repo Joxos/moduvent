@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, Generic, List, Literal, NoReturn, Tuple, Type, TypeVar, Optional
+from typing import Any, Dict, Generic, List, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
 
@@ -67,6 +67,13 @@ class BaseCallbackRegistry(ABC, Generic[E]):
             and self.conditions == value.conditions
         )
 
+    def _check_conditions(self, event: E):
+        for condition in self.conditions:
+            if not condition(event):
+                common_logger.debug(f"Condition {condition} failed, skipping.")
+                return False
+        return True
+
     @abstractmethod
     def __eq__(self, value):
         return (
@@ -131,20 +138,11 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
 
         self.func_type = check_function_type(func)
 
-    def _check_conditions(self):
-        for condition in self.conditions:
-            if not condition(self.event):
-                common_logger.debug(f"Condition {condition} failed, skipping.")
-                return False
-        return True
-
-    def is_callable(self) -> Literal[True] | NoReturn:
+    def is_callable(self) -> bool | NoReturn:
         """Check if conditions are met. Otherwise raise an error."""
-        return (
-            True
-            if self.func and self._func_type_valid() and self._check_conditions()
-            else self._report_function()
-        )
+        if not self._func_type_valid():
+            self._report_function()
+        return bool(self._check_conditions(self.event))
 
     @abstractmethod
     def call(self): ...
@@ -234,7 +232,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 common_logger.debug(f"Cleared all subscriptions for {event_type}")
 
     @abstractmethod
-    def _process_callqueue(self) -> Optional[List]: ...
+    def _process_callqueue(self) -> List: ...
 
     @abstractmethod
     def register(
@@ -273,10 +271,10 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             return False, event_type
         return True, event_type
 
-    def emit(self, event: E):
+    def emit(self, event: E) -> List:
         valid, event_type = self._emit_check(event)
         if not valid:
-            return
+            return []
         common_logger.debug(f"Emitting {event}")
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
@@ -284,6 +282,11 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
+                if not callback._check_conditions(event):
+                    common_logger.debug(
+                        f"Skipping {callback} due to conditions not met."
+                    )
+                    continue
                 self._append_to_callqueue(
                     self.processing_class(
                         func=callback.func,
@@ -305,7 +308,7 @@ def subscribe_method(*args, **kwargs):
     strategy = get_subscription_strategy(*args, **kwargs)
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
+        def events_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = defaultdict(list)  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -322,7 +325,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[[E], None] | Callable[[Any, E], None]):
+        def conditions_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             func._subscriptions[event_type].append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
