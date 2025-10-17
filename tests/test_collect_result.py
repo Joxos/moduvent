@@ -13,13 +13,13 @@ def handler2(data):
     return "handler2"
 
 
-@subscribe(sig)
+@subscribe(sig, lambda sig: sig.sender == "sender1")
 def handler3(data):
     return "handler3"
 
 
 def test_collect_result():
-    assert emit(sig()) == ["handler1", "handler2", "handler3"]
+    assert emit(sig()) == ["handler1", "handler2"]
 
 
 if __name__ == "__main__":
