@@ -38,6 +38,8 @@ def check_function_type(func):
                 return FunctionTypes.UNBOUND_METHOD
             else:
                 return FunctionTypes.FUNCTION
+        case "builtin_function_or_method":
+            return FunctionTypes.FUNCTION
         case _:
             return FunctionTypes.UNKNOWN
 
