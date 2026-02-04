@@ -9,10 +9,19 @@ from .common import (
     BaseCallbackProcessing,
     BaseCallbackRegistry,
     BaseEventManager,
+    DuplicateResultKeyError,
+    InvalidCallbackRegistryError,
+    InvalidCallbackReturnError,
     PostCallbackRegistry,
+    merge_callback_results,
+    validate_callback_result,
 )
 from .events import E, EventMeta
-from .utils import SUBSCRIPTION_STRATEGY, get_subscription_strategy
+from .utils import (
+    SUBSCRIPTION_STRATEGY,
+    get_subscription_strategy,
+    is_coroutine_function,
+)
 
 moduvent_logger = logger.bind(source="moduvent_sync")
 
@@ -27,12 +36,18 @@ class CallbackRegistry(BaseCallbackRegistry[E]):
 
 
 class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
-    def call(self):
+    def call(self) -> Dict[str, Any] | None:
         if super().is_callable():
             try:
-                return self.func(self.event)
+                result = self.func(self.event)
+                callback_name = getattr(self.func, "__qualname__", str(self.func))
+                return validate_callback_result(result, callback_name)
+            except (InvalidCallbackReturnError, DuplicateResultKeyError):
+                raise
             except Exception as e:
                 moduvent_logger.exception(f"Error while processing {self}: {e}")
+                return None
+        return None
 
 
 # We say that a subscription is the information that a method wants to be called back
@@ -71,20 +86,31 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         with self._callqueue_lock:
             self._callqueue.clear()
 
-    def _process_callqueue(self):
+    def _process_callqueue(self) -> Dict[str, Any]:
         if self.halted:
-            return []
+            return {}
         moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
-        for callback in self._callqueue:
-            moduvent_logger.debug(f"\t{callback}")
         moduvent_logger.debug("Processing callqueue...")
-        results = []
+        results: Dict[str, Any] = {}
+        result_sources: Dict[str, str] = {}
         with self._callqueue_lock:
+            # Copy the queue for logging to avoid iteration issues
+            queue_snapshot = list(self._callqueue)
+            for callback in queue_snapshot:
+                moduvent_logger.debug(f"\t{callback}")
             while self._callqueue:
                 callback = self._callqueue.popleft()
                 moduvent_logger.debug(f"Calling {callback}")
                 try:
-                    results.append(callback.call())
+                    result = callback.call()
+                    callback_name = getattr(
+                        callback.func, "__qualname__", str(callback.func)
+                    )
+                    merge_callback_results(
+                        results, result, callback_name, result_sources
+                    )
+                except (InvalidCallbackReturnError, DuplicateResultKeyError):
+                    raise
                 except Exception as e:
                     moduvent_logger.exception(f"Error while processing callback: {e}")
                     continue
@@ -97,6 +123,12 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         event_type: Type[E],
         *conditions: Callable[[E], bool],
     ):
+        # Validate that the callback is not async
+        callback_name = getattr(func, "__qualname__", str(func))
+        if is_coroutine_function(func):
+            raise InvalidCallbackRegistryError(
+                callback_name, expected="sync", got="async"
+            )
         with self._subscription_lock:
             super().register(func, event_type, *conditions)
 

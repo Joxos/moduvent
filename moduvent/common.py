@@ -19,6 +19,104 @@ from .utils import (
 common_logger = logger.bind(source="moduvent_common")
 
 
+# =============================================================================
+# Custom Exceptions
+# =============================================================================
+
+
+class DuplicateResultKeyError(Exception):
+    """Raised when multiple callbacks return the same result key."""
+
+    def __init__(self, key: str, callback1: str, callback2: str):
+        self.key = key
+        self.callback1 = callback1
+        self.callback2 = callback2
+        super().__init__(
+            f"Duplicate result key '{key}' returned by callbacks: "
+            f"'{callback1}' and '{callback2}'"
+        )
+
+
+class InvalidCallbackReturnError(TypeError):
+    """Raised when a callback returns an invalid type (not None or dict[str, Any])."""
+
+    def __init__(self, callback_name: str, return_type: type):
+        self.callback_name = callback_name
+        self.return_type = return_type
+        super().__init__(
+            f"Callback '{callback_name}' returned invalid type '{return_type.__name__}'. "
+            f"Expected None or dict[str, Any]."
+        )
+
+
+class InvalidCallbackRegistryError(TypeError):
+    """Raised when registering a callback with wrong type (sync vs async mismatch)."""
+
+    def __init__(self, callback_name: str, expected: str, got: str):
+        self.callback_name = callback_name
+        self.expected = expected
+        self.got = got
+        super().__init__(
+            f"Cannot register '{callback_name}': expected {expected} callback, "
+            f"got {got} callback."
+        )
+
+
+# =============================================================================
+# Result Validation and Merging Utilities
+# =============================================================================
+
+
+def validate_callback_result(result: Any, callback_name: str) -> Dict[str, Any] | None:
+    """Validate and normalize callback return value.
+
+    Args:
+        result: The return value from callback
+        callback_name: Name of the callback for error messages
+
+    Returns:
+        None if result is None, otherwise the validated dict
+
+    Raises:
+        InvalidCallbackReturnError: If result is not None or dict[str, Any]
+    """
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        raise InvalidCallbackReturnError(callback_name, type(result))
+    # Validate all keys are strings
+    for key in result.keys():
+        if not isinstance(key, str):
+            raise InvalidCallbackReturnError(callback_name, type(result))
+    return result
+
+
+def merge_callback_results(
+    accumulated: Dict[str, Any],
+    new_result: Dict[str, Any] | None,
+    callback_name: str,
+    result_sources: Dict[str, str],
+) -> None:
+    """Merge callback result into accumulated results dict.
+
+    Args:
+        accumulated: The dict to merge into (mutated in place)
+        new_result: The result dict to merge (or None)
+        callback_name: Name of the callback for error messages
+        result_sources: Dict tracking which callback produced each key
+
+    Raises:
+        DuplicateResultKeyError: If a key already exists in accumulated
+    """
+    if new_result is None:
+        return
+    for key, value in new_result.items():
+        if key in accumulated:
+            raise DuplicateResultKeyError(key, result_sources[key], callback_name)
+        accumulated[key] = value
+        result_sources[key] = callback_name
+
+
 class BaseCallbackRegistry(ABC, Generic[E]):
     func: WeakReference = WeakReference()
     event_type: EventInheritor = EventInheritor()
@@ -145,7 +243,7 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
         return bool(self._check_conditions(self.event))
 
     @abstractmethod
-    def call(self): ...
+    def call(self) -> Dict[str, Any] | None: ...
 
 
 BCR = TypeVar("BCR", bound=BaseCallbackRegistry)
@@ -232,7 +330,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 common_logger.debug(f"Cleared all subscriptions for {event_type}")
 
     @abstractmethod
-    def _process_callqueue(self) -> List: ...
+    def _process_callqueue(self) -> Dict[str, Any]: ...
 
     @abstractmethod
     def register(
@@ -271,10 +369,10 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             return False, event_type
         return True, event_type
 
-    def emit(self, event: E) -> List:
+    def emit(self, event: E) -> Dict[str, Any]:
         valid, event_type = self._emit_check(event)
         if not valid:
-            return []
+            return {}
         common_logger.debug(f"Emitting {event}")
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
@@ -328,6 +426,8 @@ def subscribe_method(*args, **kwargs):
         def conditions_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
+            if event_type not in func._subscriptions:  # pyright: ignore[reportFunctionMemberAccess]
+                func._subscriptions[event_type] = []  # pyright: ignore[reportFunctionMemberAccess]
             func._subscriptions[event_type].append(  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
                 PostCallbackRegistry(
                     func=func, event_type=event_type, conditions=conditions

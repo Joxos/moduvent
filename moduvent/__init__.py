@@ -1,5 +1,10 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
-from .common import subscribe_method
+from .common import (
+    DuplicateResultKeyError,
+    InvalidCallbackRegistryError,
+    InvalidCallbackReturnError,
+    subscribe_method,
+)
 from .events import (
     DataEvent,
     DataEventFactory,
@@ -63,4 +68,7 @@ __all__ = [
     "EventFactory",
     "halt",
     "ahalt",
+    "DuplicateResultKeyError",
+    "InvalidCallbackRegistryError",
+    "InvalidCallbackReturnError",
 ]

@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum, auto
 
 from .events import Event
@@ -9,6 +10,24 @@ def is_class_and_subclass(obj):
 
 def is_instance_and_subclass(obj):
     return is_class_and_subclass(type(obj))
+
+
+def is_coroutine_function(func) -> bool:
+    """Check if a function is a coroutine function (async def).
+
+    Handles regular async functions, bound methods, staticmethods, and classmethods.
+    """
+    # Handle staticmethod/classmethod wrappers
+    if isinstance(func, staticmethod):
+        func = func.__func__
+    elif isinstance(func, classmethod):
+        func = func.__func__
+
+    # For bound methods, check the underlying function
+    if hasattr(func, "__func__"):
+        func = func.__func__
+
+    return asyncio.iscoroutinefunction(func)
 
 
 class FunctionTypes(Enum):

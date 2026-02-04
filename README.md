@@ -88,6 +88,33 @@ if __name__ == "__main__":
     # or anywhere else in your code
 ```
 
+### Callback Return Values
+
+Callbacks can optionally return data that gets merged into a single result dictionary:
+
+```python
+@subscribe(UserLoggedIn)
+def validate_user(event):
+    """Return validation results."""
+    return {"validated": True, "validation_time": 0.5}
+
+@subscribe(UserLoggedIn)
+def enrich_user_data(event):
+    """Return enriched data."""
+    return {"user_role": "admin", "permissions": ["read", "write"]}
+
+# Emit returns merged results from all callbacks
+result = emit(UserLoggedIn(user_id=123, timestamp="2023-01-01"))
+# result == {"validated": True, "validation_time": 0.5, "user_role": "admin", "permissions": ["read", "write"]}
+```
+
+**Rules:**
+- Callbacks must return either `None` or `dict[str, Any]` (string keys only)
+- Returning other types raises `InvalidCallbackReturnError`
+- If multiple callbacks return the same key, `DuplicateResultKeyError` is raised
+
+**Async Note:** When using `AsyncEventManager`, callbacks run concurrently and execution order is **not guaranteed**. Design your callbacks to be independent of each other.
+
 ### Unsubscribe events
 
 You can unsubscribe subscriptions in many ways:

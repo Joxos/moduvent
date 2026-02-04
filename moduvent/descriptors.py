@@ -56,7 +56,14 @@ class WeakReference:
             if value is None:
                 obj._func_ref = None
                 raise ValueError(f"Cannot set weak reference of None to {obj}")
-            elif check_function_type(value) == FunctionTypes.BOUND_METHOD:
+
+            # Unwrap staticmethod and classmethod descriptors
+            if isinstance(value, staticmethod):
+                value = value.__func__
+            elif isinstance(value, classmethod):
+                value = value.__func__
+
+            if check_function_type(value) == FunctionTypes.BOUND_METHOD:
                 obj._func_ref = weakref.WeakMethod(value)
             else:
                 try:

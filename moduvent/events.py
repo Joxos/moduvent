@@ -28,8 +28,9 @@ class Event:
         return MutedContext(cls)
 
     def __str__(self) -> str:
-        # get all attributes without the ones starting with __
-        attrs = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("__")]
+        # get all attributes without dunder or mangled private attributes
+        # (Python mangles __private to _ClassName__private)
+        attrs = [f"{k}={v}" for k, v in self.__dict__.items() if "__" not in k]
         return f"{type(self).__qualname__}({', '.join(attrs)})"
 
 
@@ -89,6 +90,14 @@ class EventMeta(type):
         new_class = super().__new__(cls, name, bases, attrs)
 
         _subscriptions = defaultdict(list)
+
+        # First, inherit subscriptions from parent classes
+        for base in bases:
+            if hasattr(base, "_subscriptions"):
+                for event_type, registries in base._subscriptions.items():
+                    _subscriptions[event_type].extend(registries)
+
+        # Then, add subscriptions from this class's own methods
         for attr_name, attr_value in attrs.items():
             # find all subscriptions of methods
             if hasattr(attr_value, "_subscriptions"):
