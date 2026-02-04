@@ -415,10 +415,17 @@ class TestStateIsolation:
 
         await async_manager.register(async_handler, SampleEvent)
 
-        await async_manager.halt()
+        async_manager.halt()
 
-        # Sync manager unchanged
+        # Sync manager unchanged and still works
         assert SampleEvent in sync_manager._subscriptions
+        results = sync_manager.emit(SampleEvent())
+        assert results == {"sync_result": "sync"}
+
+        # Async manager is halted
+        assert async_manager.is_halted
+        results = await async_manager.emit(SampleEvent())
+        assert results == {}
 
 
 # =============================================================================

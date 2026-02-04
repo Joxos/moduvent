@@ -273,11 +273,24 @@ BCP = TypeVar("BCP", bound=BaseCallbackProcessing)
 
 
 class BaseEventManager(ABC, Generic[BCR, BCP, E]):
-    _subscriptions: Dict[Type[E], List[BCR]] = defaultdict(list)
-    _callqueue = None
-    _subscription_lock = None
-    _callqueue_lock = None
-    halted = False
+    """Abstract base class for event managers.
+
+    Subclasses must implement:
+    - registry_class: property returning the callback registry class
+    - processing_class: property returning the callback processing class
+    - emit(): emit an event to all registered callbacks
+    - register(): register a callback for an event type
+    - unsubscribe(): unsubscribe callbacks
+    - reset(): reset all subscriptions
+    """
+
+    _subscriptions: Dict[Type[E], List[BCR]]
+    _halted: bool = False
+
+    @property
+    def is_halted(self) -> bool:
+        """Check if the event manager is halted."""
+        return self._halted
 
     @property
     @abstractmethod
@@ -288,41 +301,36 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     def processing_class(cls) -> Type[BCP]: ...
 
     @abstractmethod
-    def _set_subscriptions(self, subscriptions: Dict[Type[E], List[BCR]]):
-        """Wrap this function with lock in subclass"""
-        self._subscriptions = subscriptions
-
-    @abstractmethod
-    def _append_to_callqueue(self, callback: BCP): ...
-
-    @abstractmethod
-    def _get_callqueue_length(self) -> int:
-        """Since the async version getting the length of callqueue may differ, we have this helper function to abstract the logic."""
-        ...
-
-    @abstractmethod
     def reset(self):
-        """Reset the subscriptions."""
+        """Reset the subscriptions and resume from halted state."""
         ...
 
     def halt(self):
-        """Halt the event manager by setting self.halted to True."""
-        self.halted = True
+        """Halt the event manager. All ongoing and future emit() calls will return empty results."""
+        self._halted = True
 
-    def _remove_subscriptions(self, filter_func: Callable[[Type[E], BCR], bool]):
-        new_subscriptions = defaultdict(list)
-        for event_type, callbacks in self._subscriptions.items():
-            for cb in callbacks:
-                if not filter_func(event_type, cb):
-                    new_subscriptions[event_type].append(cb)
-                else:
-                    common_logger.debug(f"Removing subscription: {cb}")
+    def resume(self):
+        """Resume the event manager from halted state."""
+        self._halted = False
 
-        self._set_subscriptions(new_subscriptions)
+    def _emit_check(self, event: E):
+        """Validate event before emitting. Returns (is_valid, event_type)."""
+        if self._halted:
+            common_logger.debug("Event manager is halted, skipping.")
+            return False, None
+        if not is_instance_and_subclass(event):
+            common_logger.warning(f"Skipping non-instance event: {event}")
+            return False, None
+        event_type = type(event)
+        if not event_type.enabled:
+            common_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
+            return False, None
+        return True, event_type
 
     def _unsubscribe_check_args(
         self, func: Callable[[E], Any] | None, event_type: Type[E] | None
     ):
+        """Validate unsubscribe arguments."""
         if not func and not event_type:
             raise ValueError(
                 f"Either func or event_type must be provided (got func={func}, event_type={event_type})."
@@ -332,27 +340,10 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                 f"Invalid argument type (func={func}, event_type={event_type})."
             )
 
-    def _unsubscribe_process_logic(
-        self, func: Callable[[E], Any] | None, event_type: Type[E] | None
-    ):
-        if func and event_type:
-            if event_type not in self._subscriptions:
-                common_logger.debug(
-                    f"No subscriptions for {event_type} found, skipping."
-                )
-                return
-            self._remove_subscriptions(lambda e, c: e == event_type and c == func)
-            common_logger.debug(f"Removed subscription for {event_type} and {func}")
-        elif func:
-            self._remove_subscriptions(lambda e, c: c == func)
-            common_logger.debug(f"Removed all callbacks for {func}")
-        elif event_type:
-            if event_type in self._subscriptions:
-                self._remove_subscriptions(lambda e, c: e == event_type)
-                common_logger.debug(f"Cleared all subscriptions for {event_type}")
-
     @abstractmethod
-    def _process_callqueue(self) -> Dict[str, Any]: ...
+    def emit(self, event: E) -> Dict[str, Any]:
+        """Emit an event to all registered callbacks."""
+        ...
 
     @abstractmethod
     def register(
@@ -361,86 +352,17 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         event_type: Type[E],
         *conditions: Callable[[E], bool],
     ):
-        """Wrap this function with lock in subclass"""
-        callback: BCR = self.registry_class(
-            func=func,
-            event_type=event_type,
-            conditions=conditions,
-        )
-        self._subscriptions[callback.event_type].append(callback)
-        common_logger.debug(f"Registered {callback}")
+        """Register a callback for an event type."""
+        ...
 
+    @abstractmethod
     def unsubscribe(
         self,
         func: Callable[[E], Any] | None = None,
         event_type: Type[E] | None = None,
     ):
-        self._unsubscribe_check_args(func, event_type)
-        self._unsubscribe_process_logic(func, event_type)
-
-    def _emit_check(self, event: E):
-        if self.halted:
-            common_logger.debug("Event manager is halted, skipping.")
-            return False, event
-        if not is_instance_and_subclass(event):
-            common_logger.warning(f"Skipping non-instance event: {event}")
-            return False, event
-        event_type = type(event)
-        if not event_type.enabled:
-            common_logger.debug(f"Skipping disabled event {event_type.__qualname__}")
-            return False, event_type
-        return True, event_type
-
-    def emit(self, event: E) -> Dict[str, Any]:
-        valid, event_type = self._emit_check(event)
-        if not valid:
-            return {}
-        common_logger.debug(f"Emitting {event}")
-        expired_callbacks: List[BCR] = []
-        if event_type in self._subscriptions:
-            callbacks = self._subscriptions[event_type]
-            common_logger.debug(
-                f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
-            )
-            for callback in callbacks:
-                # Check if the weak reference has expired
-                if callback.func is None:
-                    common_logger.warning(
-                        f"Callback expired for event '{event_type.__name__}': {callback}. "
-                        f"The callback was garbage collected before being unsubscribed."
-                    )
-                    expired_callbacks.append(callback)
-                    continue
-                if not callback._check_conditions(event):
-                    common_logger.debug(
-                        f"Skipping {callback} due to conditions not met."
-                    )
-                    continue
-                self._append_to_callqueue(
-                    self.processing_class(
-                        func=callback.func,
-                        event=event,
-                        conditions=callback.conditions,
-                    )
-                )
-
-        # Clean up expired callbacks
-        if expired_callbacks:
-            self._cleanup_expired_callbacks(event_type, expired_callbacks)
-
-        return self._process_callqueue()
-
-    def _cleanup_expired_callbacks(
-        self, event_type: Type[E], expired_callbacks: List[BCR]
-    ):
-        """Remove expired callbacks from subscriptions."""
-        for expired in expired_callbacks:
-            if event_type in self._subscriptions:
-                try:
-                    self._subscriptions[event_type].remove(expired)
-                    common_logger.debug(f"Removed expired callback: {expired}")
-                except ValueError:
-                    pass  # Already removed
+        """Unsubscribe a callback from an event type."""
+        ...
 
 
 def subscribe_method(*args, **kwargs):

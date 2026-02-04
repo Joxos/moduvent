@@ -382,16 +382,30 @@ class TestAsyncResetAndHalt:
         assert len(async_manager._subscriptions) == 0
 
     @pytest.mark.asyncio
-    async def test_halt_clears_subscriptions(self, async_manager):
-        """halt() should clear subscriptions."""
+    async def test_halt_stops_emit_processing(self, async_manager):
+        """halt() should stop emit processing and return empty results."""
 
         async def handler(event):
-            return event.value
+            return {"result": "value"}
 
         await async_manager.register(handler, SampleEvent)
-        await async_manager.halt()
 
-        assert len(async_manager._subscriptions) == 0
+        # First emit works
+        results = await async_manager.emit(SampleEvent())
+        assert results == {"result": "value"}
+
+        # After halt, emit returns empty dict
+        async_manager.halt()
+        assert async_manager.is_halted
+
+        results = await async_manager.emit(SampleEvent())
+        assert results == {}
+
+        # Resume allows processing again
+        async_manager.resume()
+        assert not async_manager.is_halted
+        results = await async_manager.emit(SampleEvent())
+        assert results == {"result": "value"}
 
     @pytest.mark.asyncio
     async def test_reset_allows_re_registration(self, async_manager):
@@ -409,29 +423,38 @@ class TestAsyncResetAndHalt:
 
 
 # =============================================================================
-# Async Queue Tests
+# Halt/Resume Tests
 # =============================================================================
 
 
-class TestAsyncCallQueue:
-    """Tests for async call queue processing."""
+class TestAsyncHaltResume:
+    """Tests for halt and resume functionality in async context."""
 
     @pytest.mark.asyncio
-    async def test_callqueue_initially_empty(self, async_manager):
-        """Call queue should be empty initially."""
-        assert async_manager._get_callqueue_length() == 0
+    async def test_is_halted_initially_false(self, async_manager):
+        """is_halted should be False initially."""
+        assert not async_manager.is_halted
 
     @pytest.mark.asyncio
-    async def test_callqueue_cleared_after_emit(self, async_manager):
-        """Call queue should be empty after emit() completes."""
+    async def test_halt_sets_is_halted(self, async_manager):
+        """halt() should set is_halted to True."""
+        async_manager.halt()
+        assert async_manager.is_halted
 
-        async def handler(event):
-            return {"value": event.value}
+    @pytest.mark.asyncio
+    async def test_resume_clears_is_halted(self, async_manager):
+        """resume() should set is_halted to False."""
+        async_manager.halt()
+        async_manager.resume()
+        assert not async_manager.is_halted
 
-        await async_manager.register(handler, SampleEvent)
-        await async_manager.emit(SampleEvent())
-
-        assert async_manager._get_callqueue_length() == 0
+    @pytest.mark.asyncio
+    async def test_reset_auto_resumes(self, async_manager):
+        """reset() should auto-resume from halted state."""
+        async_manager.halt()
+        assert async_manager.is_halted
+        await async_manager.reset()
+        assert not async_manager.is_halted
 
 
 # =============================================================================

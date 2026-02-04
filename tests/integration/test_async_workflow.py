@@ -649,13 +649,19 @@ class TestAsyncLifecycleManagement:
         await manager.emit(ProcessEvent(data={}, step=1))
         assert call_count["value"] == 1
 
-        await manager.halt()
+        manager.halt()
 
-        # After halt, subscriptions should be cleared
-        assert (
-            ProcessEvent not in manager._subscriptions
-            or len(manager._subscriptions[ProcessEvent]) == 0
-        )
+        # After halt, emit returns empty results (but subscriptions remain)
+        assert manager.is_halted
+        results = await manager.emit(ProcessEvent(data={}, step=2))
+        assert results == {}
+        assert call_count["value"] == 1  # Handler not called
+
+        # Resume allows processing again
+        manager.resume()
+        results = await manager.emit(ProcessEvent(data={}, step=3))
+        assert results == {"result": "result"}
+        assert call_count["value"] == 2
 
     @pytest.mark.asyncio
     async def test_unsubscribe_during_async_workflow(self, manager):

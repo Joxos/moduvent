@@ -14,7 +14,6 @@ Tests cover:
 import pytest
 import threading
 from moduvent import Event
-from moduvent.moduvent import CallbackProcessing
 
 
 # =============================================================================
@@ -427,21 +426,30 @@ class TestResetAndHalt:
 
         assert len(event_manager._subscriptions) == 0
 
-    def test_halt_clears_callqueue(self, event_manager):
-        """halt() should clear the call queue."""
+    def test_halt_stops_emit_processing(self, event_manager):
+        """halt() should stop emit processing and return empty results."""
 
         def handler(event):
-            pass
+            return {"result": "value"}
 
         event_manager.register(handler, SampleEvent)
-        # Manually add to callqueue
-        event_manager._append_to_callqueue(
-            CallbackProcessing(func=handler, event=SampleEvent())
-        )
-        assert event_manager._get_callqueue_length() > 0
 
+        # First emit works
+        results = event_manager.emit(SampleEvent())
+        assert results == {"result": "value"}
+
+        # After halt, emit returns empty dict
         event_manager.halt()
-        assert event_manager._get_callqueue_length() == 0
+        assert event_manager.is_halted
+
+        results = event_manager.emit(SampleEvent())
+        assert results == {}
+
+        # Resume allows processing again
+        event_manager.resume()
+        assert not event_manager.is_halted
+        results = event_manager.emit(SampleEvent())
+        assert results == {"result": "value"}
 
     def test_reset_allows_re_registration(self, event_manager):
         """After reset(), new registrations should work."""
@@ -458,27 +466,34 @@ class TestResetAndHalt:
 
 
 # =============================================================================
-# Call Queue Tests
+# Halt/Resume Tests
 # =============================================================================
 
 
-class TestCallQueue:
-    """Tests for call queue processing."""
+class TestHaltResume:
+    """Tests for halt and resume functionality."""
 
-    def test_callqueue_initially_empty(self, event_manager):
-        """Call queue should be empty initially."""
-        assert event_manager._get_callqueue_length() == 0
+    def test_is_halted_initially_false(self, event_manager):
+        """is_halted should be False initially."""
+        assert not event_manager.is_halted
 
-    def test_callqueue_cleared_after_emit(self, event_manager):
-        """Call queue should be empty after emit() completes."""
+    def test_halt_sets_is_halted(self, event_manager):
+        """halt() should set is_halted to True."""
+        event_manager.halt()
+        assert event_manager.is_halted
 
-        def handler(event):
-            pass
+    def test_resume_clears_is_halted(self, event_manager):
+        """resume() should set is_halted to False."""
+        event_manager.halt()
+        event_manager.resume()
+        assert not event_manager.is_halted
 
-        event_manager.register(handler, SampleEvent)
-        event_manager.emit(SampleEvent())
-
-        assert event_manager._get_callqueue_length() == 0
+    def test_reset_auto_resumes(self, event_manager):
+        """reset() should auto-resume from halted state."""
+        event_manager.halt()
+        assert event_manager.is_halted
+        event_manager.reset()
+        assert not event_manager.is_halted
 
 
 # =============================================================================

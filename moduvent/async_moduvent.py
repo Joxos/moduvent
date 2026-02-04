@@ -76,11 +76,9 @@ class AsyncEventManager(
         self._post_subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = (
             defaultdict(list)
         )
-        self._callqueue: asyncio.Queue[AsyncCallbackProcessing] = asyncio.Queue()
         self._subscription_lock = asyncio.Lock()
         self._post_subscription_lock = RLock()
-
-        self.worker_count = 10
+        self._halted = False
 
     @property
     def registry_class(cls) -> Type[AsyncCallbackRegistry]:
@@ -90,42 +88,161 @@ class AsyncEventManager(
     def processing_class(cls) -> Type[AsyncCallbackProcessing]:
         return AsyncCallbackProcessing
 
-    async def _set_subscriptions(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        self, subscriptions: Dict[Type[E], List[AsyncCallbackRegistry]]
+    async def reset(self):
+        """Reset subscriptions and resume from halted state."""
+        async with self._subscription_lock:
+            self._subscriptions.clear()
+        self._halted = False  # Auto-resume
+
+    async def register(
+        self,
+        func: Callable[[E], Awaitable],
+        event_type: Type[E],
+        *conditions: Callable[[E], bool],
     ):
+        """Register an async callback for an event type."""
+        callback_name = getattr(func, "__qualname__", str(func))
+        if not is_coroutine_function(func):
+            raise InvalidCallbackRegistryError(
+                callback_name, expected="async", got="sync"
+            )
+        callback = self.registry_class(
+            func=func,
+            event_type=event_type,
+            conditions=conditions,
+        )
         async with self._subscription_lock:
-            return super()._set_subscriptions(subscriptions)
+            self._subscriptions[callback.event_type].append(callback)
+        async_moduvent_logger.debug(f"Registered {callback}")
 
-    async def _append_to_callqueue(self, callback: AsyncCallbackProcessing):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        await self._callqueue.put(callback)
-
-    def _get_callqueue_length(self) -> int:
-        return self._callqueue.qsize()
-
-    async def reset(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
+    async def unsubscribe(
+        self,
+        func: Callable[[E], Any] | None = None,
+        event_type: Type[E] | None = None,
+    ):
+        """Unsubscribe a callback from an event type."""
+        self._unsubscribe_check_args(func, event_type)
         async with self._subscription_lock:
-            self._subscriptions.clear()
+            if func and event_type:
+                if event_type not in self._subscriptions:
+                    async_moduvent_logger.debug(
+                        f"No subscriptions for {event_type} found, skipping."
+                    )
+                    return
+                self._subscriptions[event_type] = [
+                    cb for cb in self._subscriptions[event_type] if cb != func
+                ]
+                async_moduvent_logger.debug(
+                    f"Removed subscription for {event_type} and {func}"
+                )
+            elif func:
+                for et in list(self._subscriptions.keys()):
+                    self._subscriptions[et] = [
+                        cb for cb in self._subscriptions[et] if cb != func
+                    ]
+                async_moduvent_logger.debug(f"Removed all callbacks for {func}")
+            elif event_type:
+                if event_type in self._subscriptions:
+                    del self._subscriptions[event_type]
+                    async_moduvent_logger.debug(
+                        f"Cleared all subscriptions for {event_type}"
+                    )
 
-    async def halt(self):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        async with self._subscription_lock:
-            self._subscriptions.clear()
+    async def emit(self, event: E) -> Dict[str, Any]:
+        """Emit an event to all registered callbacks.
 
-    async def _process_callqueue(self) -> Dict[str, Any]:  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        if self.halted:
+        Uses a local queue to ensure thread safety. Each emit() call
+        operates independently without interfering with concurrent emit() calls.
+        """
+        valid, event_type = self._emit_check(event)
+        if not valid:
             return {}
-        # note that asyncio.Queue is not iterable
-        async_moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
-        # for i in range(self._get_callqueue_length()):
-        #     callback = self._callqueue.get_nowait()
-        #     async_moduvent_logger.debug(f"\t{callable}")
-        #     self._callqueue.put_nowait(callback)
-        async_moduvent_logger.debug("Processing callqueue...")
-        # The asyncio.Queue is naturally corotine-safe
+
+        async_moduvent_logger.debug(f"Emitting {event}")
+
+        # Get a snapshot of callbacks (with lock)
+        async with self._subscription_lock:
+            if event_type not in self._subscriptions:
+                return {}
+            callbacks = list(self._subscriptions[event_type])
+
+        if not callbacks:
+            return {}
+
+        async_moduvent_logger.debug(
+            f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
+        )
+
+        # Build local queue for this emit call
+        local_queue: List[AsyncCallbackProcessing] = []
+        expired_callbacks: List[AsyncCallbackRegistry] = []
+
+        for callback in callbacks:
+            if self._halted:
+                async_moduvent_logger.debug(
+                    "Event manager halted during emit, stopping."
+                )
+                return {}
+
+            if callback.func is None:
+                async_moduvent_logger.warning(
+                    f"Callback expired for event '{event_type.__name__}': {callback}. "
+                    f"The callback was garbage collected before being unsubscribed."
+                )
+                expired_callbacks.append(callback)
+                continue
+
+            if not callback._check_conditions(event):
+                async_moduvent_logger.debug(
+                    f"Skipping {callback} due to conditions not met."
+                )
+                continue
+
+            local_queue.append(
+                self.processing_class(
+                    func=callback.func,
+                    event=event,
+                    conditions=callback.conditions,
+                )
+            )
+
+        # Clean up expired callbacks
+        if expired_callbacks:
+            async with self._subscription_lock:
+                for expired in expired_callbacks:
+                    if event_type in self._subscriptions:
+                        try:
+                            self._subscriptions[event_type].remove(expired)
+                            async_moduvent_logger.debug(
+                                f"Removed expired callback: {expired}"
+                            )
+                        except ValueError:
+                            pass
+
+        # Process the local queue
+        return await self._process_local_queue(local_queue)
+
+    async def _process_local_queue(
+        self, queue: List[AsyncCallbackProcessing]
+    ) -> Dict[str, Any]:
+        """Process a local callback queue and return merged results."""
+        if self._halted:
+            return {}
+
+        async_moduvent_logger.debug(
+            f"Processing local queue ({len(queue)} callbacks)..."
+        )
+
         # Note: Async emit does NOT guarantee callback execution order
         tasks: list[tuple[asyncio.Task, str]] = []  # (task, callback_name)
         async with asyncio.TaskGroup() as group:
-            while not self._callqueue.empty():
-                callback = await self._callqueue.get()
+            for callback in queue:
+                if self._halted:
+                    async_moduvent_logger.debug(
+                        "Event manager halted during processing, stopping."
+                    )
+                    break
+
                 async_moduvent_logger.debug(f"Calling {callback}...")
                 try:
                     callback_name = getattr(
@@ -133,14 +250,13 @@ class AsyncEventManager(
                     )
                     task = group.create_task(callback.call())
                     tasks.append((task, callback_name))
-                    self._callqueue.task_done()
                 except Exception as e:
                     async_moduvent_logger.exception(
                         f"Error while processing callback: {e}"
                     )
                     continue
-            await self._callqueue.join()
-        async_moduvent_logger.debug("End processing callqueue.")
+
+        async_moduvent_logger.debug("End processing local queue.")
 
         # Merge results from all tasks
         results: Dict[str, Any] = {}
@@ -157,74 +273,9 @@ class AsyncEventManager(
                 )
         return results
 
-    async def register(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        self,
-        func: Callable[[E], None],
-        event_type: Type[E],
-        *conditions: Callable[[E], bool],
-    ):
-        # Validate that the callback is async
-        callback_name = getattr(func, "__qualname__", str(func))
-        if not is_coroutine_function(func):
-            raise InvalidCallbackRegistryError(
-                callback_name, expected="async", got="sync"
-            )
-        async with self._subscription_lock:
-            super().register(func, event_type, *conditions)
-
-    async def unsubscribe(  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        self,
-        func: Callable[[E], Any] | None = None,
-        event_type: Type[E] | None = None,
-    ):
-        """Async version of unsubscribe that properly awaits _set_subscriptions."""
-        self._unsubscribe_check_args(func, event_type)
-        # We need to reimplement _unsubscribe_process_logic here because
-        # _remove_subscriptions calls _set_subscriptions which is async
-        if func and event_type:
-            if event_type not in self._subscriptions:
-                async_moduvent_logger.debug(
-                    f"No subscriptions for {event_type} found, skipping."
-                )
-                return
-            await self._async_remove_subscriptions(
-                lambda e, c: e == event_type and c == func
-            )
-            async_moduvent_logger.debug(
-                f"Removed subscription for {event_type} and {func}"
-            )
-        elif func:
-            await self._async_remove_subscriptions(lambda e, c: c == func)
-            async_moduvent_logger.debug(f"Removed all callbacks for {func}")
-        elif event_type:
-            if event_type in self._subscriptions:
-                await self._async_remove_subscriptions(lambda e, c: e == event_type)
-                async_moduvent_logger.debug(
-                    f"Cleared all subscriptions for {event_type}"
-                )
-
-    async def _async_remove_subscriptions(
-        self, filter_func: Callable[[Type[E], AsyncCallbackRegistry], bool]
-    ):
-        """Async version of _remove_subscriptions."""
-        from collections import defaultdict
-
-        new_subscriptions = defaultdict(list)
-        for event_type, callbacks in self._subscriptions.items():
-            for cb in callbacks:
-                if not filter_func(event_type, cb):
-                    new_subscriptions[event_type].append(cb)
-                else:
-                    async_moduvent_logger.debug(f"Removing subscription: {cb}")
-
-        await self._set_subscriptions(new_subscriptions)
-
     async def initialize(self):
         """Call this in main event loop to register post-subscriptions."""
         async_moduvent_logger.debug("Initializing event manager...")
-        # we do not acquire async lock here since it will cause deadlock with register()
-        # this might be a PROBLEM in occasions where we initialize() along with subscribe()
-        # for now we assume that subscribe() will be called before initialize()
         with self._post_subscription_lock:
             async with asyncio.TaskGroup() as group:
                 for event_type, callbacks in self._post_subscriptions.items():
@@ -233,6 +284,12 @@ class AsyncEventManager(
         self._post_subscriptions.clear()
 
     def subscribe(self, *args, **kwargs):
+        """Subscribe decorator for registering async callbacks.
+
+        The first argument must be an event type.
+        If the second argument is a function, then functions after that will be registered as conditions.
+        If the second argument is another event, then events after that will be registered as multi-callbacks.
+        """
         strategy = get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
@@ -263,52 +320,6 @@ class AsyncEventManager(
             return conditions_decorator
         else:
             raise ValueError(f"Invalid subscription strategy: {strategy}")
-
-    async def emit(self, event: E) -> Dict[str, Any]:  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
-        valid, event_type = self._emit_check(event)
-        if not valid:
-            return {}
-        async_moduvent_logger.debug(f"Emitting {event}")
-        expired_callbacks = []
-        if event_type in self._subscriptions:
-            logger.debug(f"Processing {event_type.__qualname__} subscriptions...")
-            callbacks = self._subscriptions[event_type]
-            async_moduvent_logger.debug(
-                f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
-            )
-            for callback in callbacks:
-                # Check if the weak reference has expired
-                if callback.func is None:
-                    async_moduvent_logger.warning(
-                        f"Callback expired for event '{event_type.__name__}': {callback}. "
-                        f"The callback was garbage collected before being unsubscribed."
-                    )
-                    expired_callbacks.append(callback)
-                    continue
-                logger.debug(f"Adding {callback} to callqueue...")
-                await self._append_to_callqueue(
-                    self.processing_class(
-                        func=callback.func,
-                        event=event,
-                        conditions=callback.conditions,
-                    )
-                )
-
-        # Clean up expired callbacks
-        if expired_callbacks:
-            await self._async_cleanup_expired_callbacks(event_type, expired_callbacks)
-
-        return await self._process_callqueue()
-
-    async def _async_cleanup_expired_callbacks(self, event_type, expired_callbacks):
-        """Remove expired callbacks from subscriptions (async version)."""
-        for expired in expired_callbacks:
-            if event_type in self._subscriptions:
-                try:
-                    self._subscriptions[event_type].remove(expired)
-                    async_moduvent_logger.debug(f"Removed expired callback: {expired}")
-                except ValueError:
-                    pass  # Already removed
 
 
 class AsyncEventAwareBase(Generic[E], metaclass=EventMeta):

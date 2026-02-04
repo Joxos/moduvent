@@ -347,6 +347,7 @@ class TestAsyncEventAwareBase:
                 return {"value": event.value}
 
         instance = await TestClass.create()
+        assert instance
 
         assert SampleEvent in manager._subscriptions
         # Keep instance alive until assertion

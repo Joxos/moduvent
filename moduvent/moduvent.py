@@ -1,7 +1,7 @@
-from collections import defaultdict, deque
+from collections import defaultdict
 from collections.abc import Callable
 from threading import RLock
-from typing import Any, Deque, Dict, Generic, List, Type
+from typing import Any, Dict, Generic, List, Type
 
 from loguru import logger
 
@@ -55,9 +55,8 @@ class CallbackProcessing(BaseCallbackProcessing[E], CallbackRegistry):
 class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
     def __init__(self):
         self._subscriptions: Dict[Type[E], List[CallbackRegistry]] = defaultdict(list)
-        self._callqueue: Deque[CallbackProcessing] = deque()
         self._subscription_lock = RLock()
-        self._callqueue_lock = RLock()
+        self._halted = False
 
     @property
     def registry_class(cls) -> Type[CallbackRegistry]:
@@ -67,55 +66,11 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
     def processing_class(cls) -> Type[CallbackProcessing]:
         return CallbackProcessing
 
-    def _set_subscriptions(self, subscriptions: Dict[Type[E], List[CallbackRegistry]]):
-        with self._subscription_lock:
-            return super()._set_subscriptions(subscriptions)
-
-    def _append_to_callqueue(self, callback: CallbackProcessing):
-        with self._callqueue_lock:
-            self._callqueue.append(callback)
-
-    def _get_callqueue_length(self):
-        return len(self._callqueue)
-
     def reset(self):
+        """Reset subscriptions and resume from halted state."""
         with self._subscription_lock:
             self._subscriptions.clear()
-
-    def halt(self):
-        with self._callqueue_lock:
-            self._callqueue.clear()
-
-    def _process_callqueue(self) -> Dict[str, Any]:
-        if self.halted:
-            return {}
-        moduvent_logger.debug(f"Callqueue ({self._get_callqueue_length()}):")
-        moduvent_logger.debug("Processing callqueue...")
-        results: Dict[str, Any] = {}
-        result_sources: Dict[str, str] = {}
-        with self._callqueue_lock:
-            # Copy the queue for logging to avoid iteration issues
-            queue_snapshot = list(self._callqueue)
-            for callback in queue_snapshot:
-                moduvent_logger.debug(f"\t{callback}")
-            while self._callqueue:
-                callback = self._callqueue.popleft()
-                moduvent_logger.debug(f"Calling {callback}")
-                try:
-                    result = callback.call()
-                    callback_name = getattr(
-                        callback.func, "__qualname__", str(callback.func)
-                    )
-                    merge_callback_results(
-                        results, result, callback_name, result_sources
-                    )
-                except (InvalidCallbackReturnError, DuplicateResultKeyError):
-                    raise
-                except Exception as e:
-                    moduvent_logger.exception(f"Error while processing callback: {e}")
-                    continue
-        moduvent_logger.debug("End processing callqueue.")
-        return results
+        self._halted = False  # Auto-resume
 
     def register(
         self,
@@ -123,21 +78,160 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         event_type: Type[E],
         *conditions: Callable[[E], bool],
     ):
-        # Validate that the callback is not async
+        """Register a callback for an event type."""
         callback_name = getattr(func, "__qualname__", str(func))
         if is_coroutine_function(func):
             raise InvalidCallbackRegistryError(
                 callback_name, expected="sync", got="async"
             )
+        callback = self.registry_class(
+            func=func,
+            event_type=event_type,
+            conditions=conditions,
+        )
         with self._subscription_lock:
-            super().register(func, event_type, *conditions)
+            self._subscriptions[callback.event_type].append(callback)
+        moduvent_logger.debug(f"Registered {callback}")
+
+    def unsubscribe(
+        self,
+        func: Callable[[E], Any] | None = None,
+        event_type: Type[E] | None = None,
+    ):
+        """Unsubscribe a callback from an event type."""
+        self._unsubscribe_check_args(func, event_type)
+        with self._subscription_lock:
+            if func and event_type:
+                if event_type not in self._subscriptions:
+                    moduvent_logger.debug(
+                        f"No subscriptions for {event_type} found, skipping."
+                    )
+                    return
+                self._subscriptions[event_type] = [
+                    cb for cb in self._subscriptions[event_type] if cb != func
+                ]
+                moduvent_logger.debug(
+                    f"Removed subscription for {event_type} and {func}"
+                )
+            elif func:
+                for et in list(self._subscriptions.keys()):
+                    self._subscriptions[et] = [
+                        cb for cb in self._subscriptions[et] if cb != func
+                    ]
+                moduvent_logger.debug(f"Removed all callbacks for {func}")
+            elif event_type:
+                if event_type in self._subscriptions:
+                    del self._subscriptions[event_type]
+                    moduvent_logger.debug(f"Cleared all subscriptions for {event_type}")
+
+    def emit(self, event: E) -> Dict[str, Any]:
+        """Emit an event to all registered callbacks.
+
+        Uses a local queue to ensure thread safety. Each emit() call
+        operates independently without interfering with concurrent emit() calls.
+        """
+        valid, event_type = self._emit_check(event)
+        if not valid:
+            return {}
+
+        moduvent_logger.debug(f"Emitting {event}")
+
+        # Get a thread-safe snapshot of callbacks
+        with self._subscription_lock:
+            if event_type not in self._subscriptions:
+                return {}
+            callbacks = list(self._subscriptions[event_type])
+
+        if not callbacks:
+            return {}
+
+        moduvent_logger.debug(
+            f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
+        )
+
+        # Build local queue for this emit call
+        local_queue: List[CallbackProcessing] = []
+        expired_callbacks: List[CallbackRegistry] = []
+
+        for callback in callbacks:
+            if self._halted:
+                moduvent_logger.debug("Event manager halted during emit, stopping.")
+                return {}
+
+            if callback.func is None:
+                moduvent_logger.warning(
+                    f"Callback expired for event '{event_type.__name__}': {callback}. "
+                    f"The callback was garbage collected before being unsubscribed."
+                )
+                expired_callbacks.append(callback)
+                continue
+
+            if not callback._check_conditions(event):
+                moduvent_logger.debug(f"Skipping {callback} due to conditions not met.")
+                continue
+
+            local_queue.append(
+                self.processing_class(
+                    func=callback.func,
+                    event=event,
+                    conditions=callback.conditions,
+                )
+            )
+
+        # Clean up expired callbacks
+        if expired_callbacks:
+            with self._subscription_lock:
+                for expired in expired_callbacks:
+                    if event_type in self._subscriptions:
+                        try:
+                            self._subscriptions[event_type].remove(expired)
+                            moduvent_logger.debug(
+                                f"Removed expired callback: {expired}"
+                            )
+                        except ValueError:
+                            pass
+
+        # Process the local queue
+        return self._process_local_queue(local_queue)
+
+    def _process_local_queue(self, queue: List[CallbackProcessing]) -> Dict[str, Any]:
+        """Process a local callback queue and return merged results."""
+        if self._halted:
+            return {}
+
+        moduvent_logger.debug(f"Processing local queue ({len(queue)} callbacks)...")
+        results: Dict[str, Any] = {}
+        result_sources: Dict[str, str] = {}
+
+        for callback in queue:
+            if self._halted:
+                moduvent_logger.debug(
+                    "Event manager halted during processing, stopping."
+                )
+                return results
+
+            moduvent_logger.debug(f"Calling {callback}")
+            try:
+                result = callback.call()
+                callback_name = getattr(
+                    callback.func, "__qualname__", str(callback.func)
+                )
+                merge_callback_results(results, result, callback_name, result_sources)
+            except (InvalidCallbackReturnError, DuplicateResultKeyError):
+                raise
+            except Exception as e:
+                moduvent_logger.exception(f"Error while processing callback: {e}")
+                continue
+
+        moduvent_logger.debug("End processing local queue.")
+        return results
 
     def subscribe(self, *args, **kwargs):
-        """subscribe dispatcher decorator.
+        """Subscribe decorator for registering callbacks.
+
         The first argument must be an event type.
         If the second argument is a function, then functions after that will be registered as conditions.
         If the second argument is another event, then events after that will be registered as multi-callbacks.
-        If arguments after the second argument is not same, then it will raise a ValueError.
         """
         strategy = get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
