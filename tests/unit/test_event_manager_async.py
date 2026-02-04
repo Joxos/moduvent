@@ -93,7 +93,9 @@ class TestAsyncRegistration:
         async def handler(event):
             return event.value
 
-        condition = lambda e: e.value > 0
+        def condition(e):
+            return e.value > 0
+
         await async_manager.register(handler, SampleEvent, condition)
 
         registry = async_manager._subscriptions[SampleEvent][0]
@@ -149,7 +151,9 @@ class TestAsyncSubscribeDecorator:
     @pytest.mark.asyncio
     async def test_subscribe_with_condition(self, async_manager):
         """@asubscribe with condition should store condition."""
-        condition = lambda e: e.value > 10
+
+        def condition(e):
+            return e.value > 10
 
         @async_manager.subscribe(SampleEvent, condition)
         async def handler(event):
@@ -313,7 +317,9 @@ class TestAsyncEmit:
             results.append(event.value)
             return {"value": event.value}
 
-        condition = lambda e: e.value > 10
+        def condition(e):
+            return e.value > 10
+
         await async_manager.register(handler, SampleEvent, condition)
         await async_manager.emit(SampleEvent(value=50))
 
@@ -328,7 +334,9 @@ class TestAsyncEmit:
             results.append(event.value)
             return event.value
 
-        condition = lambda e: e.value > 100
+        def condition(e):
+            return e.value > 100
+
         await async_manager.register(handler, SampleEvent, condition)
         await async_manager.emit(SampleEvent(value=50))
 

@@ -1,5 +1,6 @@
 from .async_moduvent import AsyncEventAwareBase, AsyncEventManager
 from .common import (
+    CallbackExpiredError,
     DuplicateResultKeyError,
     InvalidCallbackRegistryError,
     InvalidCallbackReturnError,
@@ -68,6 +69,7 @@ __all__ = [
     "EventFactory",
     "halt",
     "ahalt",
+    "CallbackExpiredError",
     "DuplicateResultKeyError",
     "InvalidCallbackRegistryError",
     "InvalidCallbackReturnError",

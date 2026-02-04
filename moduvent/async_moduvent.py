@@ -1,5 +1,4 @@
 import asyncio
-from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from threading import RLock
@@ -270,6 +269,7 @@ class AsyncEventManager(
         if not valid:
             return {}
         async_moduvent_logger.debug(f"Emitting {event}")
+        expired_callbacks = []
         if event_type in self._subscriptions:
             logger.debug(f"Processing {event_type.__qualname__} subscriptions...")
             callbacks = self._subscriptions[event_type]
@@ -277,6 +277,14 @@ class AsyncEventManager(
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
+                # Check if the weak reference has expired
+                if callback.func is None:
+                    async_moduvent_logger.warning(
+                        f"Callback expired for event '{event_type.__name__}': {callback}. "
+                        f"The callback was garbage collected before being unsubscribed."
+                    )
+                    expired_callbacks.append(callback)
+                    continue
                 logger.debug(f"Adding {callback} to callqueue...")
                 await self._append_to_callqueue(
                     self.processing_class(
@@ -286,23 +294,80 @@ class AsyncEventManager(
                     )
                 )
 
+        # Clean up expired callbacks
+        if expired_callbacks:
+            await self._async_cleanup_expired_callbacks(event_type, expired_callbacks)
+
         return await self._process_callqueue()
+
+    async def _async_cleanup_expired_callbacks(self, event_type, expired_callbacks):
+        """Remove expired callbacks from subscriptions (async version)."""
+        for expired in expired_callbacks:
+            if event_type in self._subscriptions:
+                try:
+                    self._subscriptions[event_type].remove(expired)
+                    async_moduvent_logger.debug(f"Removed expired callback: {expired}")
+                except ValueError:
+                    pass  # Already removed
 
 
 class AsyncEventAwareBase(Generic[E], metaclass=EventMeta):
-    """The base class that utilize the metaclass."""
+    """Base class for classes that want to use @subscribe_method decorator with async handlers.
+
+    This class provides automatic registration of async methods decorated with
+    @subscribe_method. Since registration is async, use the create() class method
+    to instantiate.
+
+    Usage:
+        class MyAsyncHandler(AsyncEventAwareBase):
+            @subscribe_method(MyEvent)
+            async def handle_event(self, event: MyEvent):
+                return {"result": "handled"}
+
+        # Option 1: Use class-level event_manager
+        MyAsyncHandler.event_manager = my_async_manager
+        handler = await MyAsyncHandler.create()
+
+        # Option 2: Pass event_manager to create()
+        handler = await MyAsyncHandler.create(event_manager=my_async_manager)
+    """
 
     event_manager: AsyncEventManager
     _subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
 
-    def __init__(self, event_manager=None):
-        if event_manager:
-            self.event_manager: AsyncEventManager = event_manager
+    def __init__(self, event_manager: AsyncEventManager | None = None):
+        """Initialize the instance (but does not register handlers).
+
+        Note: Use create() class method instead of __init__ directly,
+        as registration requires async operations.
+
+        Args:
+            event_manager: Optional AsyncEventManager instance. If provided, it will
+                be used instead of the class-level event_manager attribute.
+        """
+        if event_manager is not None:
+            self.event_manager = event_manager
 
     @classmethod
-    @abstractmethod
-    async def create(cls, event_manager):
-        instance = cls(event_manager)
+    async def create(
+        cls, event_manager: AsyncEventManager | None = None, **kwargs
+    ) -> "AsyncEventAwareBase":
+        """Create and initialize an instance with all handlers registered.
+
+        This is the recommended way to instantiate AsyncEventAwareBase subclasses.
+
+        Args:
+            event_manager: Optional AsyncEventManager instance. If provided, it will
+                be used instead of the class-level event_manager attribute.
+            **kwargs: Additional keyword arguments passed to __init__.
+
+        Returns:
+            A fully initialized instance with all handlers registered.
+
+        Example:
+            handler = await MyAsyncHandler.create(event_manager=manager)
+        """
+        instance = cls(event_manager=event_manager, **kwargs)
         await instance._register()
         return instance
 

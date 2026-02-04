@@ -162,13 +162,36 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
 
 
 class EventAwareBase(Generic[E], metaclass=EventMeta):
-    """The base class that utilize the metaclass."""
+    """Base class for classes that want to use @subscribe_method decorator.
+
+    This class provides automatic registration of methods decorated with
+    @subscribe_method when an instance is created.
+
+    Usage:
+        class MyHandler(EventAwareBase):
+            @subscribe_method(MyEvent)
+            def handle_event(self, event: MyEvent):
+                return {"result": "handled"}
+
+        # Option 1: Use class-level event_manager
+        MyHandler.event_manager = my_manager
+        handler = MyHandler()
+
+        # Option 2: Pass event_manager to constructor
+        handler = MyHandler(event_manager=my_manager)
+    """
 
     event_manager: EventManager
     _subscriptions: Dict[Type[E], List[PostCallbackRegistry]] = {}
 
-    def __init__(self, event_manager=None):
-        if event_manager:
+    def __init__(self, event_manager: EventManager | None = None):
+        """Initialize and register all subscribed methods.
+
+        Args:
+            event_manager: Optional EventManager instance. If provided, it will
+                be used instead of the class-level event_manager attribute.
+        """
+        if event_manager is not None:
             self.event_manager = event_manager
         # trigger registrations
         self._register()

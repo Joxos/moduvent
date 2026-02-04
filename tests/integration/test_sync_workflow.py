@@ -355,7 +355,6 @@ class TestEventAwareBaseIntegration:
 
     def test_multiple_event_aware_instances(self, manager):
         """Multiple EventAwareBase instances should all receive events."""
-        instance_results = []
 
         class Counter(EventAwareBase):
             event_manager = manager

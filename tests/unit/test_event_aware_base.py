@@ -77,6 +77,7 @@ class SampleEventAwareBase:
                 return event.value
 
         instance = TestClass()
+        assert instance
 
         # Handler should be registered
         assert SampleEvent in manager._subscriptions
@@ -96,6 +97,7 @@ class SampleEventAwareBase:
                 return {"received_value": event.value}
 
         instance = TestClass()
+        assert instance
         manager.emit(SampleEvent(value=42))
 
         assert received == [42]
@@ -112,6 +114,7 @@ class SampleEventAwareBase:
                 return {"value": event.value * 2}
 
         instance = TestClass()
+        assert instance
         results = manager.emit(SampleEvent(value=21))
 
         assert results.get("value") == 42
@@ -132,6 +135,7 @@ class SampleEventAwareBase:
                 return "test_event2"
 
         instance = TestClass()
+        assert instance
 
         assert SampleEvent in manager._subscriptions
         assert SampleEvent2 in manager._subscriptions
@@ -150,6 +154,7 @@ class SampleEventAwareBase:
                 return {"event_type": type(event).__name__}
 
         instance = TestClass()
+        assert instance
 
         manager.emit(SampleEvent())
         manager.emit(SampleEvent2())
@@ -174,6 +179,8 @@ class SampleEventAwareBase:
 
         instance1 = TestClass("first")
         instance2 = TestClass("second")
+        assert instance1
+        assert instance2
 
         results = manager.emit(SampleEvent())
 
@@ -193,6 +200,7 @@ class SampleEventAwareBase:
                 return event.value
 
         instance = TestClass(event_manager=custom_manager)
+        assert instance
 
         # Should be registered with custom_manager
         assert SampleEvent in custom_manager._subscriptions
@@ -228,7 +236,9 @@ class TestSubscribeMethodDecorator:
 
     def test_subscribe_method_with_condition(self):
         """@subscribe_method with condition should store condition."""
-        condition = lambda e: e.value > 0
+
+        def condition(e):
+            return e.value > 0
 
         @subscribe_method(SampleEvent, condition)
         def handler(self, event):
@@ -280,6 +290,7 @@ class TestStaticAndClassMethods:
                 return {"static_result": event.value}
 
         instance = TestClass()
+        assert instance
         manager.emit(SampleEvent(value=42))
 
         assert 42 in results
@@ -299,6 +310,7 @@ class TestStaticAndClassMethods:
                 return {"class_method_result": event.value}
 
         instance = TestClass()
+        assert instance
         manager.emit(SampleEvent(value=42))
 
         assert 42 in results
@@ -320,12 +332,6 @@ class TestAsyncEventAwareBase:
         class TestClass(AsyncEventAwareBase):
             event_manager = manager
 
-            @classmethod
-            async def create(cls, event_manager):
-                instance = cls(event_manager)
-                await instance._register()
-                return instance
-
         assert hasattr(TestClass, "_subscriptions")
 
     @pytest.mark.asyncio
@@ -336,19 +342,14 @@ class TestAsyncEventAwareBase:
         class TestClass(AsyncEventAwareBase):
             event_manager = manager
 
-            @classmethod
-            async def create(cls, event_manager):
-                instance = cls(event_manager)
-                await instance._register()
-                return instance
-
             @subscribe_method(SampleEvent)
             async def handle_event(self, event: SampleEvent):
-                return event.value
+                return {"value": event.value}
 
-        instance = await TestClass.create(manager)
+        instance = await TestClass.create()
 
         assert SampleEvent in manager._subscriptions
+        # Keep instance alive until assertion
 
     @pytest.mark.asyncio
     async def test_async_handler_receives_events(self):
@@ -359,21 +360,17 @@ class TestAsyncEventAwareBase:
         class TestClass(AsyncEventAwareBase):
             event_manager = manager
 
-            @classmethod
-            async def create(cls, event_manager):
-                instance = cls(event_manager)
-                await instance._register()
-                return instance
-
             @subscribe_method(SampleEvent)
             async def handle_event(self, event: SampleEvent):
                 received.append(event.value)
                 return {"received_value": event.value}
 
-        instance = await TestClass.create(manager)
+        instance = await TestClass.create()
         await manager.emit(SampleEvent(value=42))
 
         assert received == [42]
+        # Keep instance alive until assertion
+        assert instance is not None
 
     @pytest.mark.asyncio
     async def test_async_handler_returns_value(self):
@@ -383,20 +380,17 @@ class TestAsyncEventAwareBase:
         class TestClass(AsyncEventAwareBase):
             event_manager = manager
 
-            @classmethod
-            async def create(cls, event_manager):
-                instance = cls(event_manager)
-                await instance._register()
-                return instance
-
             @subscribe_method(SampleEvent)
             async def handle_event(self, event: SampleEvent):
                 return {"value": event.value * 2}
 
-        instance = await TestClass.create(manager)
+        # Must keep reference to instance to prevent garbage collection
+        instance = await TestClass.create()
         results = await manager.emit(SampleEvent(value=21))
 
         assert results.get("value") == 42
+        # Keep instance alive until assertion
+        assert instance is not None
 
     @pytest.mark.asyncio
     async def test_async_multiple_instances(self):
@@ -406,23 +400,18 @@ class TestAsyncEventAwareBase:
         class TestClass(AsyncEventAwareBase):
             event_manager = manager
 
-            def __init__(self, event_manager=None):
-                self.name = ""
+            def __init__(self, event_manager=None, name=""):
+                self.name = name
                 super().__init__(event_manager)
-
-            @classmethod
-            async def create(cls, event_manager, name=""):
-                instance = cls(event_manager)
-                instance.name = name
-                await instance._register()
-                return instance
 
             @subscribe_method(SampleEvent)
             async def handle_event(self, event: SampleEvent):
                 return {f"{self.name}_result": self.name}
 
-        instance1 = await TestClass.create(manager, name="first")
-        instance2 = await TestClass.create(manager, name="second")
+        instance1 = await TestClass.create(name="first")
+        instance2 = await TestClass.create(name="second")
+        assert instance1
+        assert instance2
 
         results = await manager.emit(SampleEvent())
 
@@ -449,7 +438,7 @@ class SampleEventAwareBaseEdgeCases:
                 return "regular"
 
         instance = TestClass()
-        # Should not raise
+        assert instance
 
     def test_subclass_inherits_parent_subscriptions(self):
         """Subclass should work with its own subscriptions."""
@@ -468,6 +457,7 @@ class SampleEventAwareBaseEdgeCases:
                 return {"child_result": "child"}
 
         instance = ChildClass()
+        assert instance
 
         # Both should be registered
         results1 = manager.emit(SampleEvent())

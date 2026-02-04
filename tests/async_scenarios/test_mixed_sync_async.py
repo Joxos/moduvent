@@ -161,7 +161,7 @@ class TestThreadAndAsyncLoop:
                 sync_manager.emit(SampleEvent(value=i))
 
         # Run sync manager in thread while emitting on async manager
-        loop = asyncio.get_event_loop()
+        asyncio.get_event_loop()
 
         async def async_work():
             for i in range(100, 105):
@@ -309,7 +309,7 @@ class TestBridgingPatterns:
 
         def sync_handler(event):
             # Schedule an emit to async manager from sync handler
-            future = asyncio.run_coroutine_threadsafe(
+            asyncio.run_coroutine_threadsafe(
                 async_manager.emit(SampleEvent2(message=f"from_sync_{event.value}")),
                 loop,
             )
@@ -368,7 +368,10 @@ class TestStateIsolation:
 
     def test_reset_sync_does_not_affect_async(self, sync_manager, async_manager):
         """Resetting sync manager should not affect async manager."""
-        sync_handler = lambda e: {"sync_result": "sync"}
+
+        def sync_handler(e):
+            return {"sync_result": "sync"}
+
         sync_manager.register(sync_handler, SampleEvent)
 
         # We can't easily add to async without await, so just verify reset isolation
@@ -380,7 +383,10 @@ class TestStateIsolation:
     @pytest.mark.asyncio
     async def test_reset_async_does_not_affect_sync(self, sync_manager, async_manager):
         """Resetting async manager should not affect sync manager."""
-        sync_handler = lambda e: {"sync_result": "sync"}
+
+        def sync_handler(e):
+            return {"sync_result": "sync"}
+
         sync_manager.register(sync_handler, SampleEvent)
 
         async def async_handler(e):
@@ -398,7 +404,10 @@ class TestStateIsolation:
     @pytest.mark.asyncio
     async def test_halt_async_does_not_affect_sync(self, sync_manager, async_manager):
         """Halting async manager should not affect sync manager."""
-        sync_handler = lambda e: {"sync_result": "sync"}
+
+        def sync_handler(e):
+            return {"sync_result": "sync"}
+
         sync_manager.register(sync_handler, SampleEvent)
 
         async def async_handler(e):

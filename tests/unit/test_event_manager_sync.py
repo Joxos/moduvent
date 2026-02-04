@@ -80,7 +80,9 @@ class TestRegistration:
         def handler(event):
             pass
 
-        condition = lambda e: e.value > 0
+        def condition(e):
+            return e.value > 0
+
         event_manager.register(handler, SampleEvent, condition)
 
         registry = event_manager._subscriptions[SampleEvent][0]
@@ -92,8 +94,12 @@ class TestRegistration:
         def handler(event):
             pass
 
-        cond1 = lambda e: e.value > 0
-        cond2 = lambda e: e.value < 100
+        def cond1(e):
+            return e.value > 0
+
+        def cond2(e):
+            return e.value < 100
+
         event_manager.register(handler, SampleEvent, cond1, cond2)
 
     def test_register_rejects_async_callback(self, event_manager):
@@ -141,7 +147,9 @@ class TestSubscribeDecorator:
 
     def test_subscribe_with_condition(self, event_manager):
         """@subscribe with condition should apply condition."""
-        condition = lambda e: e.value > 10
+
+        def condition(e):
+            return e.value > 10
 
         @event_manager.subscribe(SampleEvent, condition)
         def handler(event):
@@ -268,7 +276,9 @@ class TestEmit:
         def handler(event):
             results.append(event.value)
 
-        condition = lambda e: e.value > 10
+        def condition(e):
+            return e.value > 10
+
         event_manager.register(handler, SampleEvent, condition)
         event_manager.emit(SampleEvent(value=50))
 
@@ -281,7 +291,9 @@ class TestEmit:
         def handler(event):
             results.append(event.value)
 
-        condition = lambda e: e.value > 100
+        def condition(e):
+            return e.value > 100
+
         event_manager.register(handler, SampleEvent, condition)
         event_manager.emit(SampleEvent(value=50))
 
@@ -611,9 +623,12 @@ class TestEdgeCases:
 
     def test_lambda_handler(self, event_manager):
         """Lambda handlers should work correctly."""
+
         # Keep a reference to the lambda to prevent garbage collection
         # (weak references need the original object to stay alive)
-        handler = lambda e: {"value": e.value * 2}
+        def handler(e):
+            return {"value": e.value * 2}
+
         event_manager.register(handler, SampleEvent)
         results = event_manager.emit(SampleEvent(value=21))
         assert results == {"value": 42}

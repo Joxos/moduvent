@@ -167,7 +167,10 @@ class TestCheckFunctionType:
 
     def test_detects_lambda_as_function(self):
         """Should detect lambda as function."""
-        lambda_func = lambda x: x
+
+        def lambda_func(x):
+            return x
+
         assert check_function_type(lambda_func) == FunctionTypes.FUNCTION
 
     def test_detects_bound_method(self):
@@ -256,14 +259,22 @@ class TestGetSubscriptionStrategy:
 
     def test_event_with_condition_returns_conditions_strategy(self):
         """Event with condition function should return CONDITIONS strategy."""
-        condition = lambda e: True
+
+        def condition(e):
+            return True
+
         result = get_subscription_strategy(SampleEvent, condition)
         assert result == SUBSCRIPTION_STRATEGY.CONDITIONS
 
     def test_event_with_multiple_conditions(self):
         """Event with multiple conditions should return CONDITIONS strategy."""
-        cond1 = lambda e: True
-        cond2 = lambda e: False
+
+        def cond1(e):
+            return True
+
+        def cond2(e):
+            return False
+
         result = get_subscription_strategy(SampleEvent, cond1, cond2)
         assert result == SUBSCRIPTION_STRATEGY.CONDITIONS
 
@@ -326,7 +337,9 @@ class TestIsCoroutineFunction:
         """Lambda should return False."""
         from moduvent.utils import is_coroutine_function
 
-        lambda_func = lambda x: x
+        def lambda_func(x):
+            return x
+
         assert is_coroutine_function(lambda_func) is False
 
     def test_sync_bound_method_returns_false(self):

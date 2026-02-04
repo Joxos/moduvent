@@ -157,7 +157,7 @@ class TestTaskGroupExceptionHandling:
         await manager.register(successful_callback2, SampleEvent)
 
         # Should not raise despite one callback failing
-        emit_results = await manager.emit(SampleEvent())
+        await manager.emit(SampleEvent())
 
         # Successful callbacks should complete
         assert "success1" in results
@@ -292,7 +292,7 @@ class TestLongRunningCallbacks:
 
         start = time.time()
         await manager.emit(SampleEvent())
-        total = time.time() - start
+        time.time() - start
 
         assert "cpu_like" in results
         assert "io" in results
@@ -390,7 +390,7 @@ class TestTaskGroupEdgeCases:
     async def test_empty_taskgroup(self, manager):
         """Emit with no callbacks should work."""
         # No registered callbacks
-        result = await manager.emit(SampleEvent())
+        await manager.emit(SampleEvent())
         # Should not crash
 
     @pytest.mark.asyncio

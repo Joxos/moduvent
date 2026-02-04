@@ -89,8 +89,13 @@ class TestCallbackRegistry:
 
     def test_creates_with_conditions(self):
         """Should create registry with conditions."""
-        cond1 = lambda e: e.value > 0
-        cond2 = lambda e: e.value < 100
+
+        def cond1(e):
+            return e.value > 0
+
+        def cond2(e):
+            return e.value < 100
+
         registry = CallbackRegistry(
             func=sample_callback,
             event_type=SampleEvent,
@@ -117,8 +122,13 @@ class TestCallbackRegistry:
 
     def test_check_conditions_all_pass(self):
         """_check_conditions should return True when all pass."""
-        cond1 = lambda e: True
-        cond2 = lambda e: True
+
+        def cond1(e):
+            return True
+
+        def cond2(e):
+            return True
+
         registry = CallbackRegistry(
             func=sample_callback,
             event_type=SampleEvent,
@@ -129,8 +139,13 @@ class TestCallbackRegistry:
 
     def test_check_conditions_one_fails(self):
         """_check_conditions should return False when one fails."""
-        cond1 = lambda e: True
-        cond2 = lambda e: False
+
+        def cond1(e):
+            return True
+
+        def cond2(e):
+            return False
+
         registry = CallbackRegistry(
             func=sample_callback,
             event_type=SampleEvent,

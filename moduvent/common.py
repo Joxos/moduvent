@@ -62,6 +62,28 @@ class InvalidCallbackRegistryError(TypeError):
         )
 
 
+class CallbackExpiredError(RuntimeError):
+    """Raised when a callback's weak reference has expired (been garbage collected).
+
+    This typically happens when:
+    1. A local function was registered as a callback but went out of scope
+    2. An object with a bound method callback was deleted without unsubscribing
+
+    To fix this:
+    - Keep a reference to the callback function/object alive
+    - Or call unsubscribe() before the callback goes out of scope
+    """
+
+    def __init__(self, event_type: type, callback_info: str):
+        self.event_type = event_type
+        self.callback_info = callback_info
+        super().__init__(
+            f"Callback expired for event '{event_type.__name__}': {callback_info}. "
+            f"The callback was garbage collected before being unsubscribed. "
+            f"Keep a reference to the callback or unsubscribe before it goes out of scope."
+        )
+
+
 # =============================================================================
 # Result Validation and Merging Utilities
 # =============================================================================
@@ -374,12 +396,21 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         if not valid:
             return {}
         common_logger.debug(f"Emitting {event}")
+        expired_callbacks: List[BCR] = []
         if event_type in self._subscriptions:
             callbacks = self._subscriptions[event_type]
             common_logger.debug(
                 f"Processing {event_type.__qualname__} ({len(callbacks)} callbacks)"
             )
             for callback in callbacks:
+                # Check if the weak reference has expired
+                if callback.func is None:
+                    common_logger.warning(
+                        f"Callback expired for event '{event_type.__name__}': {callback}. "
+                        f"The callback was garbage collected before being unsubscribed."
+                    )
+                    expired_callbacks.append(callback)
+                    continue
                 if not callback._check_conditions(event):
                     common_logger.debug(
                         f"Skipping {callback} due to conditions not met."
@@ -393,7 +424,23 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
                     )
                 )
 
+        # Clean up expired callbacks
+        if expired_callbacks:
+            self._cleanup_expired_callbacks(event_type, expired_callbacks)
+
         return self._process_callqueue()
+
+    def _cleanup_expired_callbacks(
+        self, event_type: Type[E], expired_callbacks: List[BCR]
+    ):
+        """Remove expired callbacks from subscriptions."""
+        for expired in expired_callbacks:
+            if event_type in self._subscriptions:
+                try:
+                    self._subscriptions[event_type].remove(expired)
+                    common_logger.debug(f"Removed expired callback: {expired}")
+                except ValueError:
+                    pass  # Already removed
 
 
 def subscribe_method(*args, **kwargs):
