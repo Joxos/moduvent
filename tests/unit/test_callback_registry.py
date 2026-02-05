@@ -12,7 +12,7 @@ Tests cover:
 
 import pytest
 from moduvent.events import Event
-from moduvent.common import (
+from moduvent.base import (
     PostCallbackRegistry,
 )
 from moduvent.moduvent import CallbackRegistry, CallbackProcessing
@@ -118,7 +118,7 @@ class TestCallbackRegistry:
     def test_equality_with_bare_function(self):
         """Registry should equal its wrapped function."""
         registry = CallbackRegistry(func=sample_callback, event_type=SampleEvent)
-        assert registry == sample_callback
+        assert registry.func == sample_callback
 
     def test_check_conditions_all_pass(self):
         """_check_conditions should return True when all pass."""

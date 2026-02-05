@@ -13,7 +13,7 @@ Tests cover:
 import pytest
 from moduvent import EventManager, Event, signal, data_event
 from moduvent.moduvent import EventAwareBase
-from moduvent.common import subscribe_method
+from moduvent.base import subscribe_method
 
 
 # =============================================================================

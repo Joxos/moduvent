@@ -12,7 +12,7 @@ import pytest
 import weakref
 from moduvent.events import Event
 from moduvent.descriptors import (
-    Checker,
+    Limiter,
     EventInheritor,
     EventInstance,
     WeakReference,
@@ -49,7 +49,7 @@ class TestChecker:
         """Checker should set public and private names."""
 
         class TestClass:
-            attr: Checker = Checker()
+            attr: Limiter = Limiter()
 
         # Access descriptor to trigger __set_name__
         assert hasattr(TestClass, "_attr")
@@ -58,7 +58,7 @@ class TestChecker:
         """Checker __get__ should return stored value."""
 
         class TestClass:
-            attr: Checker = Checker()
+            attr: Limiter = Limiter()
 
         obj = TestClass()
         obj._attr = "test_value"
@@ -67,7 +67,7 @@ class TestChecker:
     def test_checker_set_stores_value_when_conditions_pass(self):
         """Checker __set__ should store value when conditions pass."""
 
-        class AlwaysPassChecker(Checker):
+        class AlwaysPassChecker(Limiter):
             conditions = [lambda x: True]
 
         class TestClass:
@@ -80,7 +80,7 @@ class TestChecker:
     def test_checker_raises_on_failed_condition(self):
         """Checker should raise error when condition fails."""
 
-        class AlwaysFailChecker(Checker):
+        class AlwaysFailChecker(Limiter):
             conditions = [lambda x: False]
 
         class TestClass:

@@ -108,7 +108,7 @@ class TestSignalSubscription:
 
         ready = signal("ready_test")
         register(subscriber, ready)
-        assert event_manager._subscriptions[ready] == [subscriber]
+        assert [s.func for s in event_manager._subscriptions[ready]] == [subscriber]
 
         # Clean up
         event_manager.unsubscribe(subscriber, ready)

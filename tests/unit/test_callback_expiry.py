@@ -10,7 +10,8 @@ Tests cover:
 
 import gc
 import pytest
-from moduvent import Event, CallbackExpiredError
+from moduvent import Event
+from moduvent.exceptions import CallbackExpiredError
 from moduvent.moduvent import EventManager
 from moduvent.async_moduvent import AsyncEventManager
 

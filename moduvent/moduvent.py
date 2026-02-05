@@ -1,26 +1,30 @@
 from collections import defaultdict
-from collections.abc import Callable
 from threading import RLock
 from typing import Any, Dict, Generic, List, Type
+from inspect import iscoroutinefunction
 
 from loguru import logger
 
-from .common import (
-    BaseCallbackProcessing,
-    BaseCallbackRegistry,
-    BaseEventManager,
+from .exceptions import (
     DuplicateResultKeyError,
     InvalidCallbackRegistryError,
     InvalidCallbackReturnError,
+)
+
+from .base import (
+    BaseCallbackProcessing,
+    BaseCallbackRegistry,
+    BaseEventManager,
     PostCallbackRegistry,
-    merge_callback_results,
-    validate_callback_result,
+    callback_type,
+    checker_type,
 )
 from .events import E, EventMeta
 from .utils import (
     SUBSCRIPTION_STRATEGY,
     get_subscription_strategy,
-    is_coroutine_function,
+    merge_callback_results,
+    validate_callback_result,
 )
 
 moduvent_logger = logger.bind(source="moduvent_sync")
@@ -29,9 +33,9 @@ moduvent_logger = logger.bind(source="moduvent_sync")
 class CallbackRegistry(BaseCallbackRegistry[E]):
     def __eq__(self, value):
         return (
-            super()._compare_attributes(value)
+            self._compare_attributes(value)
             if isinstance(value, CallbackRegistry)
-            else super().__eq__(value)
+            else False
         )
 
 
@@ -74,13 +78,13 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
 
     def register(
         self,
-        func: Callable[[E], Any],
+        func: callback_type,
         event_type: Type[E],
-        *conditions: Callable[[E], bool],
+        *conditions: checker_type,
     ):
         """Register a callback for an event type."""
         callback_name = getattr(func, "__qualname__", str(func))
-        if is_coroutine_function(func):
+        if iscoroutinefunction(func):
             raise InvalidCallbackRegistryError(
                 callback_name, expected="sync", got="async"
             )
@@ -95,7 +99,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
 
     def unsubscribe(
         self,
-        func: Callable[[E], Any] | None = None,
+        func: callback_type | None = None,
         event_type: Type[E] | None = None,
     ):
         """Unsubscribe a callback from an event type."""
@@ -108,7 +112,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
                     )
                     return
                 self._subscriptions[event_type] = [
-                    cb for cb in self._subscriptions[event_type] if cb != func
+                    cb for cb in self._subscriptions[event_type] if cb.func != func
                 ]
                 moduvent_logger.debug(
                     f"Removed subscription for {event_type} and {func}"
@@ -116,7 +120,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
             elif func:
                 for et in list(self._subscriptions.keys()):
                     self._subscriptions[et] = [
-                        cb for cb in self._subscriptions[et] if cb != func
+                        cb for cb in self._subscriptions[et] if cb.func != func
                     ]
                 moduvent_logger.debug(f"Removed all callbacks for {func}")
             elif event_type:
@@ -236,7 +240,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
         strategy = get_subscription_strategy(*args, **kwargs)
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-            def events_decorator(func: Callable[[E], Any]):
+            def events_decorator(func: callback_type):
                 for event_type in args:
                     self.register(func=func, event_type=event_type)
                 return func
@@ -246,7 +250,7 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
             event_type = args[0]
             conditions = args[1:]
 
-            def conditions_decorator(func: Callable[[E], Any]):
+            def conditions_decorator(func: callback_type):
                 self.register(func, event_type, *conditions)
                 return func
 

@@ -48,17 +48,6 @@ class EventWithData(Event):
 
 
 # =============================================================================
-# Pytest Configuration
-# =============================================================================
-
-
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    """Use default event loop policy."""
-    return asyncio.DefaultEventLoopPolicy()
-
-
-# =============================================================================
 # Event Manager Fixtures
 # =============================================================================
 
@@ -76,7 +65,7 @@ def async_event_manager() -> AsyncEventManager:
 
 
 # =============================================================================
-# Event Fixtures
+# Event Instance Fixtures
 # =============================================================================
 
 
@@ -231,7 +220,7 @@ def async_call_tracker():
 @pytest.fixture
 def event_aware_class(event_manager):
     """Create a test EventAwareBase subclass."""
-    from moduvent.common import subscribe_method
+    from moduvent.base import subscribe_method
 
     class TestEventAware(EventAwareBase):
         event_manager = event_manager
@@ -251,7 +240,7 @@ def event_aware_class(event_manager):
 @pytest.fixture
 def async_event_aware_class(async_event_manager):
     """Create a test AsyncEventAwareBase subclass."""
-    from moduvent.common import subscribe_method
+    from moduvent.base import subscribe_method
 
     class TestAsyncEventAware(AsyncEventAwareBase):
         event_manager = async_event_manager

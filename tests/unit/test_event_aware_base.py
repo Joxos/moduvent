@@ -13,7 +13,7 @@ import pytest
 from moduvent import EventManager, Event
 from moduvent.moduvent import EventAwareBase
 from moduvent.async_moduvent import AsyncEventManager, AsyncEventAwareBase
-from moduvent.common import subscribe_method
+from moduvent.base import subscribe_method
 
 
 # =============================================================================

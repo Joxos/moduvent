@@ -5,8 +5,9 @@ from typing import Any, Dict, Generic, List, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
 
+
 from .descriptors import EventInheritor, EventInstance, WeakReference
-from .events import E, Event
+from .events import E
 from .utils import (
     SUBSCRIPTION_STRATEGY,
     FunctionTypes,
@@ -18,125 +19,8 @@ from .utils import (
 
 common_logger = logger.bind(source="moduvent_common")
 
-
-# =============================================================================
-# Custom Exceptions
-# =============================================================================
-
-
-class DuplicateResultKeyError(Exception):
-    """Raised when multiple callbacks return the same result key."""
-
-    def __init__(self, key: str, callback1: str, callback2: str):
-        self.key = key
-        self.callback1 = callback1
-        self.callback2 = callback2
-        super().__init__(
-            f"Duplicate result key '{key}' returned by callbacks: "
-            f"'{callback1}' and '{callback2}'"
-        )
-
-
-class InvalidCallbackReturnError(TypeError):
-    """Raised when a callback returns an invalid type (not None or dict[str, Any])."""
-
-    def __init__(self, callback_name: str, return_type: type):
-        self.callback_name = callback_name
-        self.return_type = return_type
-        super().__init__(
-            f"Callback '{callback_name}' returned invalid type '{return_type.__name__}'. "
-            f"Expected None or dict[str, Any]."
-        )
-
-
-class InvalidCallbackRegistryError(TypeError):
-    """Raised when registering a callback with wrong type (sync vs async mismatch)."""
-
-    def __init__(self, callback_name: str, expected: str, got: str):
-        self.callback_name = callback_name
-        self.expected = expected
-        self.got = got
-        super().__init__(
-            f"Cannot register '{callback_name}': expected {expected} callback, "
-            f"got {got} callback."
-        )
-
-
-class CallbackExpiredError(RuntimeError):
-    """Raised when a callback's weak reference has expired (been garbage collected).
-
-    This typically happens when:
-    1. A local function was registered as a callback but went out of scope
-    2. An object with a bound method callback was deleted without unsubscribing
-
-    To fix this:
-    - Keep a reference to the callback function/object alive
-    - Or call unsubscribe() before the callback goes out of scope
-    """
-
-    def __init__(self, event_type: type, callback_info: str):
-        self.event_type = event_type
-        self.callback_info = callback_info
-        super().__init__(
-            f"Callback expired for event '{event_type.__name__}': {callback_info}. "
-            f"The callback was garbage collected before being unsubscribed. "
-            f"Keep a reference to the callback or unsubscribe before it goes out of scope."
-        )
-
-
-# =============================================================================
-# Result Validation and Merging Utilities
-# =============================================================================
-
-
-def validate_callback_result(result: Any, callback_name: str) -> Dict[str, Any] | None:
-    """Validate and normalize callback return value.
-
-    Args:
-        result: The return value from callback
-        callback_name: Name of the callback for error messages
-
-    Returns:
-        None if result is None, otherwise the validated dict
-
-    Raises:
-        InvalidCallbackReturnError: If result is not None or dict[str, Any]
-    """
-    if result is None:
-        return None
-    if not isinstance(result, dict):
-        raise InvalidCallbackReturnError(callback_name, type(result))
-    # Validate all keys are strings
-    for key in result.keys():
-        if not isinstance(key, str):
-            raise InvalidCallbackReturnError(callback_name, type(result))
-    return result
-
-
-def merge_callback_results(
-    accumulated: Dict[str, Any],
-    new_result: Dict[str, Any] | None,
-    callback_name: str,
-    result_sources: Dict[str, str],
-) -> None:
-    """Merge callback result into accumulated results dict.
-
-    Args:
-        accumulated: The dict to merge into (mutated in place)
-        new_result: The result dict to merge (or None)
-        callback_name: Name of the callback for error messages
-        result_sources: Dict tracking which callback produced each key
-
-    Raises:
-        DuplicateResultKeyError: If a key already exists in accumulated
-    """
-    if new_result is None:
-        return
-    for key, value in new_result.items():
-        if key in accumulated:
-            raise DuplicateResultKeyError(key, result_sources[key], callback_name)
-        accumulated[key] = value
-        result_sources[key] = callback_name
+callback_type = Callable[[E], dict | Awaitable]
+checker_type = Callable[[E], bool]
 
 
 class BaseCallbackRegistry(ABC, Generic[E]):
@@ -145,40 +29,15 @@ class BaseCallbackRegistry(ABC, Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], Any | Awaitable],
+        func: callback_type,
         event_type: Type[E],
-        conditions: Tuple[Callable[[E], bool], ...] = (),
+        conditions: Tuple[checker_type, ...] = (),
     ) -> None:
-        self.func_type = (
-            FunctionTypes.UNKNOWN
-        )  # we first set func_type since the setter of self.func may use it
         self.func: WeakReference = func
         self.event_type: EventInheritor = event_type
         self.conditions = conditions or ()
 
         self.func_type = check_function_type(func)
-
-    def _report_function(self) -> NoReturn:
-        qualname = getattr(self.func, "__qualname__", self.func)
-        raise TypeError(f"Unknown function type for {qualname}")
-
-    def _func_type_valid(self) -> bool:
-        return self.func_type in [
-            FunctionTypes.BOUND_METHOD,
-            FunctionTypes.FUNCTION,
-            FunctionTypes.STATICMETHOD,
-        ]
-
-    def _shallow_copy(
-        self, subclass: Type["BaseCallbackRegistry"]
-    ) -> "BaseCallbackRegistry|None":
-        if self.func:
-            return subclass(
-                func=self.func,  # the weakref is valid or not is checked by the setter of subclass
-                event_type=self.event_type,
-                conditions=self.conditions,
-            )
-        return None
 
     def _compare_attributes(self, value: "BaseCallbackRegistry"):
         return (
@@ -194,24 +53,15 @@ class BaseCallbackRegistry(ABC, Generic[E]):
                 return False
         return True
 
-    @abstractmethod
-    def __eq__(self, value):
-        return (
-            self.func == value
-            if check_function_type(value)
-            in [
-                FunctionTypes.BOUND_METHOD,
-                FunctionTypes.UNBOUND_METHOD,
-                FunctionTypes.FUNCTION,
-                FunctionTypes.STATICMETHOD,
-            ]
-            else False
-        )
-
     def __str__(self):
         instance_string = str(getattr(self.func, "__self__", "None"))
         func_string = self.func.__qualname__ if self.func else self.func
         return f"Callback: {self.event_type} -> {func_string} ({instance_string}:{self.func_type})"
+
+    def __eq__(self, value):
+        if isinstance(value, self.__class__):
+            return self._compare_attributes(value)
+        return False
 
 
 class PostCallbackRegistry(BaseCallbackRegistry[E], Generic[E]):
@@ -220,23 +70,11 @@ class PostCallbackRegistry(BaseCallbackRegistry[E], Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], Any | Awaitable] | Callable[[Any, E], Any | Awaitable],
+        func: callback_type,
         event_type: Type[E],
-        conditions: Tuple[Callable[[E], bool], ...] = (),
+        conditions: Tuple[checker_type, ...] = (),
     ) -> None:
-        self.func_type = (
-            FunctionTypes.UNKNOWN
-        )  # we first set func_type since the setter of self.func may use it
-        self.func: WeakReference = func
-        self.event_type: EventInheritor = event_type
-        self.conditions = conditions or ()
-
-        self.func_type = check_function_type(func)
-
-    def __eq__(self, value):
-        if isinstance(value, PostCallbackRegistry):
-            return super()._compare_attributes(value)
-        return super().__eq__(value)
+        super().__init__(func, event_type, conditions)
 
 
 class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
@@ -245,23 +83,23 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
 
     def __init__(
         self,
-        func: Callable[[E], Any],
+        func: callback_type,
         event: E,
-        conditions: Tuple[Callable[[Event], bool], ...] | None = None,
+        conditions: Tuple[checker_type, ...] | None = None,
     ):
-        self.func_type = (
-            FunctionTypes.UNKNOWN
-        )  # we first set func_type since the setter of self.func may use it
-        self.func: WeakReference = func
+        super().__init__(func, type(event), conditions or ())
         self.event: EventInstance = event
-        self.conditions = conditions or []
-
-        self.func_type = check_function_type(func)
 
     def is_callable(self) -> bool | NoReturn:
         """Check if conditions are met. Otherwise raise an error."""
-        if not self._func_type_valid():
-            self._report_function()
+        if self.func_type not in [
+            FunctionTypes.BOUND_METHOD,
+            FunctionTypes.FUNCTION,
+            FunctionTypes.STATICMETHOD,
+        ]:
+            qualname = getattr(self.func, "__qualname__", self.func)
+            raise TypeError(f"Unknown function type for {qualname}")
+
         return bool(self._check_conditions(self.event))
 
     @abstractmethod
@@ -328,7 +166,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         return True, event_type
 
     def _unsubscribe_check_args(
-        self, func: Callable[[E], Any] | None, event_type: Type[E] | None
+        self, func: callback_type | None, event_type: Type[E] | None
     ):
         """Validate unsubscribe arguments."""
         if not func and not event_type:
@@ -348,9 +186,9 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     @abstractmethod
     def register(
         self,
-        func: Callable[[E], Any],
+        func: callback_type,
         event_type: Type[E],
-        *conditions: Callable[[E], bool],
+        *conditions: checker_type,
     ):
         """Register a callback for an event type."""
         ...
@@ -358,7 +196,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     @abstractmethod
     def unsubscribe(
         self,
-        func: Callable[[E], Any] | None = None,
+        func: callback_type | None = None,
         event_type: Type[E] | None = None,
     ):
         """Unsubscribe a callback from an event type."""
@@ -375,7 +213,7 @@ def subscribe_method(*args, **kwargs):
     strategy = get_subscription_strategy(*args, **kwargs)
     if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
-        def events_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
+        def events_decorator(func: callback_type):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = defaultdict(list)  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             for event_type in args:
@@ -392,7 +230,7 @@ def subscribe_method(*args, **kwargs):
         event_type = args[0]
         conditions = args[1:]
 
-        def conditions_decorator(func: Callable[[E], Any] | Callable[[Any, E], Any]):
+        def conditions_decorator(func: callback_type):
             if not hasattr(func, "_subscriptions"):
                 func._subscriptions = {}  # pyright: ignore[reportFunctionMemberAccess] (function attribute does not support type hint)
             if event_type not in func._subscriptions:  # pyright: ignore[reportFunctionMemberAccess]

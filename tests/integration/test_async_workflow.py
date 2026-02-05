@@ -14,7 +14,7 @@ import pytest
 import asyncio
 from moduvent.async_moduvent import AsyncEventManager, AsyncEventAwareBase
 from moduvent.events import Event
-from moduvent.common import subscribe_method
+from moduvent.base import subscribe_method
 from moduvent import signal, data_event
 
 

@@ -1,27 +1,32 @@
 import asyncio
+import contextlib
 from collections import defaultdict
-from collections.abc import Callable
 from threading import RLock
-from typing import Any, Awaitable, Dict, Generic, List, Tuple, Type
+from typing import Any, Dict, Generic, List, Tuple, Type
+from inspect import iscoroutinefunction
 
 from loguru import logger
 
-from .common import (
-    BaseCallbackProcessing,
-    BaseCallbackRegistry,
-    BaseEventManager,
+from .exceptions import (
     DuplicateResultKeyError,
     InvalidCallbackRegistryError,
     InvalidCallbackReturnError,
+)
+
+from .base import (
+    BaseCallbackProcessing,
+    BaseCallbackRegistry,
+    BaseEventManager,
     PostCallbackRegistry,
-    merge_callback_results,
-    validate_callback_result,
+    callback_type,
+    checker_type,
 )
 from .events import E, EventMeta
 from .utils import (
     SUBSCRIPTION_STRATEGY,
     get_subscription_strategy,
-    is_coroutine_function,
+    merge_callback_results,
+    validate_callback_result,
 )
 
 async_moduvent_logger = logger.bind(source="moduvent_async")
@@ -30,9 +35,9 @@ async_moduvent_logger = logger.bind(source="moduvent_async")
 class AsyncPostCallbackRegistry(PostCallbackRegistry[E]):
     def __init__(
         self,
-        func: Callable[[E], Awaitable],
+        func: callback_type,
         event_type: Type[E],
-        conditions: Tuple[Callable[[E], bool], ...] = (),
+        conditions: Tuple[checker_type, ...] = (),
     ) -> None:
         super().__init__(func, event_type, conditions)
 
@@ -96,13 +101,13 @@ class AsyncEventManager(
 
     async def register(
         self,
-        func: Callable[[E], Awaitable],
+        func: callback_type,
         event_type: Type[E],
-        *conditions: Callable[[E], bool],
+        *conditions: checker_type,
     ):
         """Register an async callback for an event type."""
         callback_name = getattr(func, "__qualname__", str(func))
-        if not is_coroutine_function(func):
+        if not iscoroutinefunction(func):
             raise InvalidCallbackRegistryError(
                 callback_name, expected="async", got="sync"
             )
@@ -117,7 +122,7 @@ class AsyncEventManager(
 
     async def unsubscribe(
         self,
-        func: Callable[[E], Any] | None = None,
+        func: callback_type | None = None,
         event_type: Type[E] | None = None,
     ):
         """Unsubscribe a callback from an event type."""
@@ -130,7 +135,7 @@ class AsyncEventManager(
                     )
                     return
                 self._subscriptions[event_type] = [
-                    cb for cb in self._subscriptions[event_type] if cb != func
+                    cb for cb in self._subscriptions[event_type] if cb.func != func
                 ]
                 async_moduvent_logger.debug(
                     f"Removed subscription for {event_type} and {func}"
@@ -138,7 +143,7 @@ class AsyncEventManager(
             elif func:
                 for et in list(self._subscriptions.keys()):
                     self._subscriptions[et] = [
-                        cb for cb in self._subscriptions[et] if cb != func
+                        cb for cb in self._subscriptions[et] if cb.func != func
                     ]
                 async_moduvent_logger.debug(f"Removed all callbacks for {func}")
             elif event_type:
@@ -211,14 +216,11 @@ class AsyncEventManager(
             async with self._subscription_lock:
                 for expired in expired_callbacks:
                     if event_type in self._subscriptions:
-                        try:
+                        with contextlib.suppress(ValueError):
                             self._subscriptions[event_type].remove(expired)
                             async_moduvent_logger.debug(
                                 f"Removed expired callback: {expired}"
                             )
-                        except ValueError:
-                            pass
-
         # Process the local queue
         return await self._process_local_queue(local_queue)
 
@@ -294,7 +296,7 @@ class AsyncEventManager(
         if strategy == SUBSCRIPTION_STRATEGY.EVENTS:
 
             def events_decorator(
-                func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
+                func: callback_type,
             ):
                 for event_type in args:
                     self._post_subscriptions[event_type].append(
@@ -308,7 +310,7 @@ class AsyncEventManager(
             conditions = args[1:]
 
             def conditions_decorator(
-                func: Callable[[E], Awaitable] | Callable[[Any, E], Awaitable],
+                func: callback_type,
             ):
                 self._post_subscriptions[event_type].append(
                     PostCallbackRegistry(

@@ -10,7 +10,9 @@ from .utils import (
 )
 
 
-class Checker:
+class Limiter:
+    """Limit the value assigned to an attribute based on conditions accepting the value."""
+
     conditions: list[Callable[..., bool]] = []
     error_message: str = (
         "{value} with {value_type} type is invalid for {name} attribute"
@@ -38,40 +40,38 @@ class Checker:
         return getattr(obj, self.private_name)
 
 
-class EventInheritor(Checker):
+class EventInheritor(Limiter):
     conditions = [is_class_and_subclass]
     error_message = (
         "{value} with {value_type} type is not an inheritor of base event class"
     )
 
 
-class EventInstance(Checker):
+class EventInstance(Limiter):
     conditions = [is_instance_and_subclass]
     error_message = "{value} with {value_type} type is not an instance of an inheritor of base event class"
 
 
 class WeakReference:
     def __set__(self, obj, value) -> None:
-        if obj is not None:
-            if value is None:
-                obj._func_ref = None
-                raise ValueError(f"Cannot set weak reference of None to {obj}")
+        if obj is None:
+            return
+        if value is None:
+            obj._func_ref = None
+            raise ValueError(f"Cannot set weak reference of None to {obj}")
 
-            # Unwrap staticmethod and classmethod descriptors
-            if isinstance(value, staticmethod):
-                value = value.__func__
-            elif isinstance(value, classmethod):
-                value = value.__func__
-
-            if check_function_type(value) == FunctionTypes.BOUND_METHOD:
-                obj._func_ref = weakref.WeakMethod(value)
-            else:
-                try:
-                    obj._func_ref = weakref.ref(value)
-                except TypeError as e:
-                    raise TypeError(
-                        f"Cannot set weak reference of {value} to {obj}"
-                    ) from e
+        # Unwrap staticmethod and classmethod descriptors
+        if isinstance(value, (staticmethod, classmethod)):
+            value = value.__func__
+        if check_function_type(value) == FunctionTypes.BOUND_METHOD:
+            obj._func_ref = weakref.WeakMethod(value)
+        else:
+            try:
+                obj._func_ref = weakref.ref(value)
+            except TypeError as e:
+                raise TypeError(
+                    f"Cannot set weak reference of {value} to {obj}"
+                ) from e
 
     def __get__(self, obj, objtype=None) -> Any:
         ref = obj._func_ref

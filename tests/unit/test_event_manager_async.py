@@ -104,7 +104,7 @@ class TestAsyncRegistration:
     @pytest.mark.asyncio
     async def test_register_rejects_sync_callback(self, async_manager):
         """Should reject sync callback with InvalidCallbackRegistryError."""
-        from moduvent.common import InvalidCallbackRegistryError
+        from moduvent.exceptions import InvalidCallbackRegistryError
 
         def sync_handler(event):
             return {"value": event.value}

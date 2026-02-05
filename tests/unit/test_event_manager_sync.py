@@ -58,7 +58,7 @@ class TestRegistration:
         event_manager.register(handler, SampleEvent)
         assert SampleEvent in event_manager._subscriptions
         assert len(event_manager._subscriptions[SampleEvent]) == 1
-        assert event_manager._subscriptions[SampleEvent][0] == handler
+        assert event_manager._subscriptions[SampleEvent][0].func == handler
 
     def test_register_multiple_handlers(self, event_manager):
         """Should register multiple handlers for same event type."""
@@ -103,7 +103,7 @@ class TestRegistration:
 
     def test_register_rejects_async_callback(self, event_manager):
         """Should reject async callback with InvalidCallbackRegistryError."""
-        from moduvent.common import InvalidCallbackRegistryError
+        from moduvent.exceptions import InvalidCallbackRegistryError
 
         async def async_handler(event):
             return {"value": event.value}
@@ -132,7 +132,7 @@ class TestSubscribeDecorator:
             return event.value
 
         assert SampleEvent in event_manager._subscriptions
-        assert event_manager._subscriptions[SampleEvent][0] == handler
+        assert event_manager._subscriptions[SampleEvent][0].func == handler
 
     def test_subscribe_multiple_events(self, event_manager):
         """@subscribe with multiple events should register for all."""
@@ -266,7 +266,7 @@ class TestEmit:
         event_manager.register(handler, DisabledEvent)
         event_manager.emit(DisabledEvent())
 
-        assert results == []
+        assert not results
 
     def test_emit_with_condition_met(self, event_manager):
         """emit() should call handler when condition is met."""
@@ -296,7 +296,7 @@ class TestEmit:
         event_manager.register(handler, SampleEvent, condition)
         event_manager.emit(SampleEvent(value=50))
 
-        assert results == []
+        assert not results
 
     def test_emit_handles_handler_exception(self, event_manager):
         """emit() should continue after handler exception."""
@@ -381,7 +381,7 @@ class TestUnsubscribe:
         event_manager.unsubscribe(handler1, SampleEvent)
 
         assert len(event_manager._subscriptions[SampleEvent]) == 1
-        assert event_manager._subscriptions[SampleEvent][0] == handler2
+        assert event_manager._subscriptions[SampleEvent][0].func == handler2
 
     def test_unsubscribe_nonexistent_handler(self, event_manager):
         """unsubscribe of non-registered handler should not raise."""

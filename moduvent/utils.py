@@ -1,6 +1,9 @@
 import asyncio
 from enum import Enum, auto
 
+from moduvent.exceptions import DuplicateResultKeyError, InvalidCallbackReturnError
+from typing import Any, Dict
+
 from .events import Event
 
 
@@ -10,24 +13,6 @@ def is_class_and_subclass(obj):
 
 def is_instance_and_subclass(obj):
     return is_class_and_subclass(type(obj))
-
-
-def is_coroutine_function(func) -> bool:
-    """Check if a function is a coroutine function (async def).
-
-    Handles regular async functions, bound methods, staticmethods, and classmethods.
-    """
-    # Handle staticmethod/classmethod wrappers
-    if isinstance(func, staticmethod):
-        func = func.__func__
-    elif isinstance(func, classmethod):
-        func = func.__func__
-
-    # For bound methods, check the underlying function
-    if hasattr(func, "__func__"):
-        func = func.__func__
-
-    return asyncio.iscoroutinefunction(func)
 
 
 class FunctionTypes(Enum):
@@ -94,3 +79,58 @@ def get_subscription_strategy(*args, **kwargs):
     return (
         SUBSCRIPTION_STRATEGY.EVENTS if all_events else SUBSCRIPTION_STRATEGY.CONDITIONS
     )
+
+
+# =============================================================================
+# Result Validation and Merging Utilities
+# =============================================================================
+
+
+def validate_callback_result(result: Any, callback_name: str) -> Dict[str, Any] | None:
+    """Validate and normalize callback return value.
+
+    Args:
+        result: The return value from callback
+        callback_name: Name of the callback for error messages
+
+    Returns:
+        None if result is None, otherwise the validated dict
+
+    Raises:
+        InvalidCallbackReturnError: If result is not None or dict[str, Any]
+    """
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        raise InvalidCallbackReturnError(callback_name, type(result))
+    # Validate all keys are strings
+    for key in result.keys():
+        if not isinstance(key, str):
+            raise InvalidCallbackReturnError(callback_name, type(result))
+    return result
+
+
+def merge_callback_results(
+    accumulated: Dict[str, Any],
+    new_result: Dict[str, Any] | None,
+    callback_name: str,
+    result_sources: Dict[str, str],
+) -> None:
+    """Merge callback result into accumulated results dict.
+
+    Args:
+        accumulated: The dict to merge into (mutated in place)
+        new_result: The result dict to merge (or None)
+        callback_name: Name of the callback for error messages
+        result_sources: Dict tracking which callback produced each key
+
+    Raises:
+        DuplicateResultKeyError: If a key already exists in accumulated
+    """
+    if new_result is None:
+        return
+    for key, value in new_result.items():
+        if key in accumulated:
+            raise DuplicateResultKeyError(key, result_sources[key], callback_name)
+        accumulated[key] = value
+        result_sources[key] = callback_name

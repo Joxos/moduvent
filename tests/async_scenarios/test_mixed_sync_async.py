@@ -240,7 +240,7 @@ class TestMixedCallbackTypes:
     @pytest.mark.asyncio
     async def test_sync_handler_in_async_manager(self, async_manager):
         """Sync handler registered to async manager should raise InvalidCallbackRegistryError."""
-        from moduvent.common import InvalidCallbackRegistryError
+        from moduvent.exceptions import InvalidCallbackRegistryError
 
         def sync_handler(event):
             return {"value": event.value}
@@ -258,7 +258,7 @@ class TestMixedCallbackTypes:
         In v6.0+, sync managers only accept sync callbacks and async managers
         only accept async callbacks.
         """
-        from moduvent.common import InvalidCallbackRegistryError
+        from moduvent.exceptions import InvalidCallbackRegistryError
 
         async def async_handler(event):
             return {"value": event.value}
