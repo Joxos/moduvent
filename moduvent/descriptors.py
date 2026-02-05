@@ -69,9 +69,7 @@ class WeakReference:
             try:
                 obj._func_ref = weakref.ref(value)
             except TypeError as e:
-                raise TypeError(
-                    f"Cannot set weak reference of {value} to {obj}"
-                ) from e
+                raise TypeError(f"Cannot set weak reference of {value} to {obj}") from e
 
     def __get__(self, obj, objtype=None) -> Any:
         ref = obj._func_ref

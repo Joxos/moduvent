@@ -1,3 +1,4 @@
+import contextlib
 from collections import defaultdict
 from threading import RLock
 from typing import Any, Dict, Generic, List, Type
@@ -187,14 +188,11 @@ class EventManager(BaseEventManager[CallbackRegistry, CallbackProcessing, E]):
             with self._subscription_lock:
                 for expired in expired_callbacks:
                     if event_type in self._subscriptions:
-                        try:
+                        with contextlib.suppress(ValueError):
                             self._subscriptions[event_type].remove(expired)
                             moduvent_logger.debug(
                                 f"Removed expired callback: {expired}"
                             )
-                        except ValueError:
-                            pass
-
         # Process the local queue
         return self._process_local_queue(local_queue)
 

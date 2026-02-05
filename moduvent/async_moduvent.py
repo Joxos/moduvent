@@ -55,7 +55,7 @@ class AsyncCallbackRegistry(BaseCallbackRegistry[E]):
 
 
 class AsyncCallbackProcessing(BaseCallbackProcessing[E], AsyncCallbackRegistry):
-    async def call(self) -> Dict[str, Any] | None:  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
+    async def call(self) -> Dict[str, Any] | None:
         if super().is_callable():
             try:
                 result = await self.func(self.event)

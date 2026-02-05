@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, Generic, List, NoReturn, Tuple, Type, TypeVar
+from typing import Any, Coroutine, Dict, Generic, List, NoReturn, Tuple, Type, TypeVar
 
 from loguru import logger
 
@@ -103,7 +103,11 @@ class BaseCallbackProcessing(BaseCallbackRegistry, ABC, Generic[E]):
         return bool(self._check_conditions(self.event))
 
     @abstractmethod
-    def call(self) -> Dict[str, Any] | None: ...
+    def call(
+        self,
+    ) -> Dict[str, Any] | None | Coroutine[Any, Any, Dict[str, Any] | None]:
+        """Call the callback function. Can be sync or async depending on subclass."""
+        ...
 
 
 BCR = TypeVar("BCR", bound=BaseCallbackRegistry)
@@ -139,7 +143,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
     def processing_class(cls) -> Type[BCP]: ...
 
     @abstractmethod
-    def reset(self):
+    def reset(self) -> None | Coroutine[Any, Any, None]:
         """Reset the subscriptions and resume from halted state."""
         ...
 
@@ -179,7 +183,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
             )
 
     @abstractmethod
-    def emit(self, event: E) -> Dict[str, Any]:
+    def emit(self, event: E) -> Dict[str, Any] | Coroutine[Any, Any, Dict[str, Any]]:
         """Emit an event to all registered callbacks."""
         ...
 
@@ -189,7 +193,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         func: callback_type,
         event_type: Type[E],
         *conditions: checker_type,
-    ):
+    ) -> None | Coroutine[Any, Any, None]:
         """Register a callback for an event type."""
         ...
 
@@ -198,7 +202,7 @@ class BaseEventManager(ABC, Generic[BCR, BCP, E]):
         self,
         func: callback_type | None = None,
         event_type: Type[E] | None = None,
-    ):
+    ) -> None | Coroutine[Any, Any, None]:
         """Unsubscribe a callback from an event type."""
         ...
 

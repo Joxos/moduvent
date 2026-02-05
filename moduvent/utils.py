@@ -1,4 +1,3 @@
-import asyncio
 from enum import Enum, auto
 
 from moduvent.exceptions import DuplicateResultKeyError, InvalidCallbackReturnError
