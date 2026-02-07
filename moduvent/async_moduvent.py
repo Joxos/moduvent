@@ -181,7 +181,7 @@ class AsyncEventManager(
     async def emit(self, event: E):  # pyright: ignore[reportIncompatibleMethodOverride] (async version)
         valid, event_type = self._emit_check(event)
         if not valid:
-            return
+            return []
         async_moduvent_logger.debug(f"Emitting {event}")
         if event_type in self._subscriptions:
             logger.debug(f"Processing {event_type.__qualname__} subscriptions...")
@@ -199,7 +199,7 @@ class AsyncEventManager(
                     )
                 )
 
-        await self._process_callqueue()
+        return await self._process_callqueue()
 
 
 class AsyncEventAwareBase(Generic[E], metaclass=EventMeta):
