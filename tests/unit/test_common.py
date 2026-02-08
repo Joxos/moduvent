@@ -59,7 +59,7 @@ def test_unsubscribe_check_args_errors(func, event_type, expected_error):
             {DummyEvent: [func_1, func_2], DummyEvent_2: [func_1, func_2]},
             [
                 call.debug(
-                    "Removed subscription for <class 'tests.test_common_base_event_manager.DummyEvent'> and <function <lambda> at"
+                    "Removed subscription for <class 'tests.unit.test_common.DummyEvent'> and <function <lambda> at"
                 )
             ],
             {DummyEvent: [func_2], DummyEvent_2: [func_1, func_2]},
@@ -79,7 +79,7 @@ def test_unsubscribe_check_args_errors(func, event_type, expected_error):
             {DummyEvent: [func_1, func_2], DummyEvent_2: [func_1, func_2]},
             [
                 call.debug(
-                    "Cleared all subscriptions for <class 'tests.test_common_base_event_manager.DummyEvent'>"
+                    "Cleared all subscriptions for <class 'tests.unit.test_common.DummyEvent'>"
                 )
             ],
             {DummyEvent_2: [func_1, func_2]},
@@ -168,21 +168,19 @@ def test_register_and_emit_happy_path(patch_common_logger):
     # Arrange
 
     mgr = EventManager()
-    called = []
 
     def cb(event):
-        # Arrange
-        called.append(event)
+        return event
 
     # Act
 
     mgr.register(cb, DummyEvent)
     event = DummyEvent()
-    mgr.emit(event)
+    results = mgr.emit(event)
 
     # Assert
 
-    assert called == [event]
+    assert results == [event]
     assert mgr._get_callqueue_length() == 0  # _process_callqueue clears it
 
 
@@ -190,10 +188,9 @@ def test_register_multiple_conditions_and_emit():
     # Arrange
 
     mgr = EventManager()
-    called = []
 
     def cb(event):
-        called.append(event)
+        return event
 
     cond1 = lambda e: True
     cond2 = lambda e: True
@@ -202,11 +199,11 @@ def test_register_multiple_conditions_and_emit():
 
     mgr.register(cb, DummyEvent, cond1, cond2)
     event = DummyEvent()
-    mgr.emit(event)
+    results = mgr.emit(event)
 
     # Assert
 
-    assert called == [event]
+    assert results == [event]
 
 
 def test_emit_no_subscriptions(monkeypatch):
@@ -247,10 +244,9 @@ def test_unsubscribe_removes_callback():
     # Arrange
 
     mgr = EventManager()
-    called = []
 
     def cb(event):
-        called.append(event)
+        return event
 
     mgr.register(cb, DummyEvent)
     event = DummyEvent()
@@ -258,32 +254,31 @@ def test_unsubscribe_removes_callback():
 
     # Act
 
-    mgr.emit(event)
+    results = mgr.emit(event)
 
     # Assert
 
-    assert not called
+    assert not results
 
 
 def test_unsubscribe_all_for_event_type():
     # Arrange
 
     mgr = EventManager()
-    called = []
 
     def cb(event):
-        called.append(event)
+        return event
 
     mgr.register(cb, DummyEvent)
     mgr.unsubscribe(event_type=DummyEvent)
 
     # Act
 
-    mgr.emit(DummyEvent())
+    results = mgr.emit(DummyEvent())
 
     # Assert
 
-    assert not called
+    assert not results
 
 
 def test_reset_clears_subscriptions():

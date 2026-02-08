@@ -24,9 +24,9 @@ def test_decoupling_with_named_signals():
     assert initialized is signal("initialized")
 
 
-def test_subscribing_to_signals(capsys):
+def test_subscribing_to_signals():
     def subscriber(signal: Signal):
-        print(f"Got a signal sent by {signal.sender!r}")
+        return f"Got a signal sent by {signal.sender!r}"
 
     ready = signal("ready")
     register(subscriber, ready)
@@ -39,47 +39,41 @@ def test_subscribing_to_signals(capsys):
 
         def go(self):
             ready = signal("ready")
-            emit(ready(self))
-            print("Processing.")
+            results = emit(ready(self))
             complete = signal("complete")
-            emit(complete(self))
+            results += emit(complete(self))
+            return results
 
         def __repr__(self):
             return f"<Processor {self.name}>"
 
     processor_a = Processor("a")
-    processor_a.go()
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
+    results = processor_a.go()
+    assert results == [
         "Got a signal sent by <Processor a>",
-        "Processing.",
     ]
 
     # test_subscribing_to_specific_senders
     # moduvent does not encorage you to subscribe to specific senders.
     # This is because complex conditions are hard to represent, error-prone and will slow down the system.
     def b_subscriber(signal: Signal):
-        print("Caught signal from processor_b.")
+        return "Caught signal from processor_b."
 
     processor_b = Processor("b")
     # function register accept zero or multiple conditions after the two common subscription arguments.
     register(b_subscriber, ready, lambda s: s.sender is processor_b)
-    processor_a.go()
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
+    results = processor_a.go()
+    assert results == [
         "Got a signal sent by <Processor a>",
-        "Processing.",
     ]
-    processor_b.go()
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
+    results = processor_b.go()
+    assert results == [
         "Got a signal sent by <Processor b>",
         "Caught signal from processor_b.",
-        "Processing.",
     ]
 
 
-def test_sending_and_receiving_data_through_signals(capsys):
+def test_sending_and_receiving_data_through_signals():
     # In blinker, data is sent nonstandardly through a accompanied dict, which is not recommended by moduvent.
     # You should always define your own class for data, which is more flexible and can be checked by the IDE.
     # Even though, moduvent still provides a data_event function for convenience, which you can pass any data as an argument.
@@ -91,8 +85,9 @@ def test_sending_and_receiving_data_through_signals(capsys):
     # This is more flexible when you need to subscribe to multiple signals.
     @subscribe(send_data_event)
     def receive_data(event: DataEvent):
-        print(f"Caught signal from None, data {event.data}")
-        emit(receive_data_event("received!", receive_data))
+        inner_results = emit(receive_data_event("received!", receive_data))
+        assert inner_results == ["Caught signal from receive_data, data received!"]
+        return f"Caught signal from None, data {event.data}"
 
     # blinker returns the result directly from an event.
     # However, an event may provoke a chain of events to achieve a complex functionality in moduvent.
@@ -100,33 +95,31 @@ def test_sending_and_receiving_data_through_signals(capsys):
     # Instead, a callback may be used to capture the specific result you need.
     @subscribe(receive_data_event)
     def capture_result(event: DataEvent):
-        print(f"Caught signal from receive_data, data {event.data}")
         assert event.sender is receive_data
         assert event.data == "received!"
+        return f"Caught signal from receive_data, data {event.data}"
 
-    emit(send_data_event({"abc": 123}))
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
+    results = emit(send_data_event({"abc": 123}))
+    assert results == [
         "Caught signal from None, data {'abc': 123}",
-        "Caught signal from receive_data, data received!",
     ]
 
 
-def test_muting_signals(capsys):
+def test_muting_signals():
     sig = signal("send-data")
 
     @subscribe(sig)
     def receive_data(event: Signal):
-        print(f"Caught signal from {event.sender!r}")
+        return f"Caught signal from {event.sender!r}"
 
     with sig.muted():
-        emit(sig("muted"))
-    emit(sig("not muted"))
-    captured = capsys.readouterr()
-    assert captured.out == "Caught signal from 'not muted'\n"
+        results_muted = emit(sig("muted"))
+    results_unmuted = emit(sig("not muted"))
+    assert results_muted == []
+    assert results_unmuted == ["Caught signal from 'not muted'"]
 
 
-def test_anonymous_signals(capsys):
+def test_anonymous_signals():
     class AltProcessor:
         on_ready = signal()
         on_complete = signal()
@@ -135,9 +128,9 @@ def test_anonymous_signals(capsys):
             self.name = name
 
         def go(self):
-            emit(self.on_ready(self))
-            print("Alternate processing.")
-            emit(self.on_complete(self))
+            results = emit(self.on_ready(self))
+            results += emit(self.on_complete(self))
+            return results
 
         def __repr__(self):
             return f"<AltProcessor {self.name}>"
@@ -147,12 +140,10 @@ def test_anonymous_signals(capsys):
 
     @subscribe(apc.on_complete)
     def completed(event: Signal):
-        print(f"AltProcessor {event.sender.name} completed!")
+        return f"AltProcessor {event.sender.name} completed!"
 
-    apc.go()
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
-        "Alternate processing.",
+    results = apc.go()
+    assert results == [
         "AltProcessor c completed!",
     ]
 
@@ -162,14 +153,13 @@ def test_anonymous_signals(capsys):
 
     @subscribe(dice_roll)
     def roll_dice(event: Signal):
-        print(f"Observed dice roll {event.sender}")
+        return f"Observed dice roll {event.sender}"
 
-    emit(dice_roll(3))
-    captured = capsys.readouterr()
-    assert captured.out == "Observed dice roll 3\n"
+    results = emit(dice_roll(3))
+    assert results == ["Observed dice roll 3"]
 
 
-def test_optimizing_signal_sending(capsys):
+def test_optimizing_signal_sending():
     # In blinker, you can check if a signal is connected before sending it, which can improve performance.
     # However, in moduvent, it is reguarded as poor-designed that the developers don't know whether they should create a signal or not.
     # So, moduvent does not have any plan to implement specific helpers about this at least for now.
@@ -184,40 +174,38 @@ def test_documenting_signals():
 
 
 @pytest.mark.asyncio
-async def test_async_receivers(capsys):
+async def test_async_receivers():
     sig = signal()
 
     @asubscribe(sig)
     async def receiver(event: Signal):
-        print(f"Caught signal from {event.sender!r}")
+        return f"Caught signal from {event.sender!r}"
 
     # blinder does not seem to check whether a subscriber in main async loop or not.
     # In moduvent however, we require you to initialize the async event manager explicitly with initialize()
     # Note that the realization is likely to be buggy if in multi-threaded environment.
     await initialize()
-    await aemit(sig("async"))
-    captured = capsys.readouterr()
-    assert captured.out == "Caught signal from 'async'\n"
+    results = await aemit(sig("async"))
+    assert results == ["Caught signal from 'async'"]
     # blinker allows you to wrap a coroutine into a synchronous function which directly calls asyncio.run()
     # We reguard this a wierd design and skip this.
 
 
-def test_call_receivers_in_order_of_registration(capsys):
+def test_call_receivers_in_order_of_registration():
     # In synchronous version of moduvent this is originally supported.
     # No need extra component.
     sig = signal()
 
     @subscribe(sig)
     def receiver1(event: Signal):
-        print(f"Caught signal from {event.sender!r} (receiver1)")
+        return f"Caught signal from {event.sender!r} (receiver1)"
 
     @subscribe(sig)
     def receiver2(event: Signal):
-        print(f"Caught signal from {event.sender!r} (receiver2)")
+        return f"Caught signal from {event.sender!r} (receiver2)"
 
-    emit(sig("order"))
-    captured = capsys.readouterr()
-    assert captured.out.split("\n")[:-1] == [
+    results = emit(sig("order"))
+    assert results == [
         "Caught signal from 'order' (receiver1)",
         "Caught signal from 'order' (receiver2)",
     ]
