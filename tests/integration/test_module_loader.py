@@ -14,5 +14,5 @@ def discover_modules_main(modules_dir):
 
 if __name__ == "__main__":
     discover_modules_main(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "example_modules")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "example_modules")
     )

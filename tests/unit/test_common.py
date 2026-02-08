@@ -59,7 +59,7 @@ def test_unsubscribe_check_args_errors(func, event_type, expected_error):
             {DummyEvent: [func_1, func_2], DummyEvent_2: [func_1, func_2]},
             [
                 call.debug(
-                    "Removed subscription for <class 'tests.test_common_base_event_manager.DummyEvent'> and <function <lambda> at"
+                    "Removed subscription for <class 'tests.unit.test_common.DummyEvent'> and <function <lambda> at"
                 )
             ],
             {DummyEvent: [func_2], DummyEvent_2: [func_1, func_2]},
@@ -79,7 +79,7 @@ def test_unsubscribe_check_args_errors(func, event_type, expected_error):
             {DummyEvent: [func_1, func_2], DummyEvent_2: [func_1, func_2]},
             [
                 call.debug(
-                    "Cleared all subscriptions for <class 'tests.test_common_base_event_manager.DummyEvent'>"
+                    "Cleared all subscriptions for <class 'tests.unit.test_common.DummyEvent'>"
                 )
             ],
             {DummyEvent_2: [func_1, func_2]},
